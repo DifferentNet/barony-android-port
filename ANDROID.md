@@ -22,14 +22,21 @@ You need:
 - the APK and matching `.sha256` file from the GitHub release;
 - a purchased Windows installation of Barony v5.0.2.
 
+Download signed builds from the
+[GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
+Focused compatibility prereleases are test builds; use the normal beta unless its
+release notes describe your device or problem.
+
 Verify the APK before installing it:
 
 ```powershell
-(Get-FileHash .\Barony-Android-Port-5.0.2-android-beta1-arm64-v8a.apk -Algorithm SHA256).Hash.ToLowerInvariant()
-Get-Content .\Barony-Android-Port-5.0.2-android-beta1-arm64-v8a.apk.sha256
+$apk = '.\Barony-Android-Port-5.0.2-android-beta2-arm64-v8a.apk'
+(Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+Get-Content "$apk.sha256"
 ```
 
-The two hashes must match.
+Replace the filename if you downloaded a newer or focused test build. The two
+hashes must match.
 
 Download the APK on the Android device and open it. Android may ask you to allow
 your browser or file manager to install unknown apps. This permission can be
@@ -102,8 +109,9 @@ You can also install or update the APK through ADB:
 
 ```powershell
 $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+$apk = '.\Barony-Android-Port-5.0.2-android-beta2-arm64-v8a.apk'
 & $adb devices
-& $adb install -r .\Barony-Android-Port-5.0.2-android-beta1-arm64-v8a.apk
+& $adb install -r $apk
 ```
 
 If Platform Tools is installed somewhere else, set `ANDROID_SDK_ROOT` to the directory containing `platform-tools`.
@@ -134,6 +142,16 @@ Mouse and keyboard input are also supported through Android.
 - Offline single-player is the tested mode.
 - Steamworks, EOS, PlayFab, achievements, workshop integration, and voice chat are disabled.
 - Controller glyph selection has not been verified across a broad range of controller models.
+- A Galaxy Note 9 with a Mali-G72 GPU has reported an almost-black 3D world.
+  The focused
+  [Mali lighting test build](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-mali-test1)
+  changes Android lightmaps to a GLES 3.0-safe normalized RGBA8 format; confirmation
+  on the affected device is pending.
+- A Poco F7 with an Adreno 825 GPU has reported flickering world tiles, black or
+  purple render blocks, and poor HDR performance. The focused
+  [HDR compatibility test build](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-hdr-compat-test1)
+  removes Android's full-resolution HDR readback and adds framebuffer diagnostics;
+  confirmation on the affected device is pending.
 - HDR tone mapping uses fixed exposure on Android. Adaptive eye adjustment is
   disabled because the desktop implementation reads a full-resolution
   half-float framebuffer back to the CPU every frame, which is unsuitable for
@@ -197,8 +215,11 @@ Back up the generated keystore and password securely. Losing the signing key pre
 Build and verify a signed release:
 
 ```powershell
-.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-beta1 -VersionCode 5000201
+.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-hdr-compat-test1 -VersionCode 5000210
 ```
+
+Use a unique version name and a version code greater than every previously
+published build when preparing a later update.
 
 The release script verifies:
 

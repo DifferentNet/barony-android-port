@@ -10,6 +10,9 @@ creates its Android data manifest automatically. See [ANDROID.md](ANDROID.md) fo
 the exact folder layout, installation alternatives, controls, limitations, and
 source-build instructions.
 
+Signed APKs, checksums, release notes, and the Windows data installer are available
+from the [GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
+
 ## Current Android support
 
 - Native `arm64-v8a` build for Android 8.0 and newer.
@@ -20,6 +23,10 @@ source-build instructions.
 - App-specific game-data storage without broad storage permissions.
 
 Multiplayer services, achievements, workshop integration, and public-store packaging are not currently supported.
+
+GPU compatibility testing is ongoing. Use the normal beta for general testing;
+focused prereleases on the releases page are intended for the affected devices
+described in their release notes.
 
 ---
 

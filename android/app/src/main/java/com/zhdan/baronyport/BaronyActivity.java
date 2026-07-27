@@ -44,6 +44,12 @@ public final class BaronyActivity extends SDLActivity {
     };
     private static final String[] REQUIRED_DATA_FILES = {
             "gamecontrollerdb.txt",
+            "npcnames-female.txt",
+            "npcnames-male.txt",
+            "playernames-female.txt",
+            "playernames-male.txt",
+            "scores.dat",
+            "scores_multiplayer.dat",
             "lang/en.txt",
             "images/system/font8x8.png",
             "maps/start.lmp",
@@ -56,6 +62,12 @@ public final class BaronyActivity extends SDLActivity {
             "maps/start.lmp",
             "models/models.txt",
             "sound/sounds.txt"
+    };
+    private static final String[] EXPECTED_CRITICAL_HASHES = {
+            "153ef608caafea9226db4e006ad8d778bfe675cf006227efe0fb5c5cac551f40",
+            "40a57fb4e5b1caed5f03599077db368f414970ebcd9aa169fdaeabeb9e6bf04d",
+            "d5344cb2891baf871d8a09aa25aeeefb60cb633f4c1a327e46d40d823bdd949c",
+            "f4da80b451d4023323f33e8edc555ef0698de2e46629fd7b710aab5f7cd7eb1e"
     };
 
     private TouchControlsView touchControls;
@@ -375,8 +387,22 @@ public final class BaronyActivity extends SDLActivity {
 
         File manifestFile = new File(dataDirectory, DATA_MANIFEST_NAME);
         if (!manifestFile.isFile()) {
-            return DataValidation.failure("missing_manifest",
-                    "The Android deployment manifest is missing. Redeploy the owned game data.");
+            DataValidation copiedDataValidation = validatePinnedCriticalFiles();
+            if (!copiedDataValidation.valid) {
+                return copiedDataValidation;
+            }
+            try {
+                writeGeneratedDataManifest(manifestFile);
+                Log.i(TAG, "BARONY_ANDROID_DATA_MANIFEST_CREATED path="
+                        + manifestFile.getAbsolutePath());
+                return DataValidation.success();
+            } catch (IOException | JSONException error) {
+                Log.e(TAG, "Unable to create the Android data manifest", error);
+                return DataValidation.failure("manifest_create_failed",
+                        "The files match Barony " + EXPECTED_GAME_VERSION
+                                + ", but the app could not create its data manifest: "
+                                + error.getMessage());
+            }
         }
 
         try {
@@ -403,16 +429,24 @@ public final class BaronyActivity extends SDLActivity {
                 return DataValidation.failure("manifest_hashes",
                         "The deployment manifest does not contain integrity checks.");
             }
-            for (String relativePath : CRITICAL_HASH_FILES) {
+            for (int index = 0; index < CRITICAL_HASH_FILES.length; ++index) {
+                String relativePath = CRITICAL_HASH_FILES[index];
+                String pinnedHash = EXPECTED_CRITICAL_HASHES[index];
                 String expectedHash = criticalFiles.optString(relativePath, "");
                 if (expectedHash.isEmpty()) {
                     return DataValidation.failure("manifest_hashes",
                             "The deployment manifest is missing a hash for " + relativePath + ".");
                 }
+                if (!pinnedHash.equalsIgnoreCase(expectedHash)) {
+                    return DataValidation.failure("version_mismatch",
+                            "The deployment manifest does not describe the supported Barony "
+                                    + EXPECTED_GAME_VERSION + " file: " + relativePath);
+                }
                 String actualHash = sha256(new File(dataDirectory, relativePath));
-                if (!expectedHash.equalsIgnoreCase(actualHash)) {
+                if (!pinnedHash.equalsIgnoreCase(actualHash)) {
                     return DataValidation.failure("integrity_mismatch",
-                            "The deployed file does not match its manifest: " + relativePath);
+                            "The copied file does not match Barony " + EXPECTED_GAME_VERSION
+                                    + ": " + relativePath);
                 }
             }
             return DataValidation.success();
@@ -420,6 +454,60 @@ public final class BaronyActivity extends SDLActivity {
             Log.e(TAG, "Unable to validate deployed game data", error);
             return DataValidation.failure("manifest_invalid",
                     "The deployment manifest could not be read: " + error.getMessage());
+        }
+    }
+
+    private DataValidation validatePinnedCriticalFiles() {
+        try {
+            for (int index = 0; index < CRITICAL_HASH_FILES.length; ++index) {
+                String relativePath = CRITICAL_HASH_FILES[index];
+                String actualHash = sha256(new File(dataDirectory, relativePath));
+                if (!EXPECTED_CRITICAL_HASHES[index].equalsIgnoreCase(actualHash)) {
+                    return DataValidation.failure("version_mismatch",
+                            "The copied file does not match Barony " + EXPECTED_GAME_VERSION
+                                    + ": " + relativePath
+                                    + ". Verify the installed files in Steam and copy them again.");
+                }
+            }
+            return DataValidation.success();
+        } catch (IOException | NoSuchAlgorithmException error) {
+            Log.e(TAG, "Unable to validate manually copied game data", error);
+            return DataValidation.failure("data_unreadable",
+                    "The copied game data could not be read: " + error.getMessage());
+        }
+    }
+
+    private void writeGeneratedDataManifest(File manifestFile)
+            throws IOException, JSONException {
+        JSONObject criticalFiles = new JSONObject();
+        for (int index = 0; index < CRITICAL_HASH_FILES.length; ++index) {
+            criticalFiles.put(CRITICAL_HASH_FILES[index], EXPECTED_CRITICAL_HASHES[index]);
+        }
+
+        JSONObject manifest = new JSONObject();
+        manifest.put("schemaVersion", DATA_MANIFEST_SCHEMA);
+        manifest.put("gameVersion", EXPECTED_GAME_VERSION);
+        manifest.put("sourceCommit", EXPECTED_SOURCE_COMMIT);
+        manifest.put("deployedAtUtc", java.time.Instant.now().toString());
+        manifest.put("deploymentMethod", "manual-copy");
+        manifest.put("criticalFiles", criticalFiles);
+
+        File temporaryManifest = new File(
+                manifestFile.getParentFile(), DATA_MANIFEST_NAME + ".tmp");
+        Files.write(
+                temporaryManifest.toPath(),
+                manifest.toString(2).getBytes(StandardCharsets.UTF_8));
+        try {
+            Files.move(
+                    temporaryManifest.toPath(),
+                    manifestFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(
+                    temporaryManifest.toPath(),
+                    manifestFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -436,8 +524,12 @@ public final class BaronyActivity extends SDLActivity {
         String message = "Requires data from an owned Barony "
                 + EXPECTED_GAME_VERSION + " PC installation.\n\n"
                 + validation.detail + "\n\n"
-                + "Deploy from the PC: tools\\deploy-menu-data.ps1\n"
-                + "Target: Android/data/com.zhdan.baronyport/files/barony-data";
+                + "Copy the contents of the PC Barony folder into:\n"
+                + "Android/data/com.zhdan.baronyport/files/barony-data\n\n"
+                + "The maps, models, music, and other folders must be directly inside "
+                + "barony-data. After copying, select Retry.\n\n"
+                + "If Android blocks this folder, use a PC with USB/ADB and "
+                + "tools\\deploy-menu-data.ps1.";
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(validation.reason.equals("version_mismatch")

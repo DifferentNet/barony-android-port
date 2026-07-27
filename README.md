@@ -4,7 +4,11 @@ This branch contains a community-maintained native Android port of Barony by Vic
 
 The Android package contains engine code and open-source dependency notices only. It does not contain Barony maps, models, music, sounds, DLC, or other commercial game data. A purchased Barony v5.0.2 PC installation is required.
 
-See [ANDROID.md](ANDROID.md) for installation, controls, limitations, and build instructions.
+Install the APK, then copy the required files from your purchased Barony v5.0.2
+installation into the app's `barony-data` folder. The app validates those files and
+creates its Android data manifest automatically. See [ANDROID.md](ANDROID.md) for
+the exact folder layout, installation alternatives, controls, limitations, and
+source-build instructions.
 
 ## Current Android support
 

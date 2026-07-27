@@ -77,8 +77,10 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
     private boolean controllerRegistered;
     private boolean destroyed;
     private boolean physicalControllerPresent;
+    private boolean inputModeInitialized;
     private boolean floatingMoveEnabled;
     private boolean floatingLookEnabled;
+    private String lastInputDeviceSummary = "";
     private int layoutMode = LAYOUT_MENU;
     private int safeLeft;
     private int safeTop;
@@ -176,11 +178,16 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
             setVisibility(controllerRegistered ? VISIBLE : GONE);
         }
 
-        if (physicalControllerPresent != hasPhysicalController) {
+        if (!inputModeInitialized || physicalControllerPresent != hasPhysicalController) {
             physicalControllerPresent = hasPhysicalController;
+            inputModeInitialized = true;
             Log.i(TAG, hasPhysicalController
                     ? "BARONY_ANDROID_TOUCH_HIDDEN_FOR_GAMEPAD"
                     : "BARONY_ANDROID_TOUCH_SHOWN");
+            Log.i(TAG, "BARONY_ANDROID_TOUCH_VISIBILITY visible="
+                    + ((!hasPhysicalController && controllerRegistered) ? 1 : 0)
+                    + " physicalController=" + (hasPhysicalController ? 1 : 0)
+                    + " virtualController=" + (controllerRegistered ? 1 : 0));
         }
     }
 
@@ -188,19 +195,91 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
         if (inputManager == null) {
             return false;
         }
+        boolean physicalControllerFound = false;
+        int candidateCount = 0;
+        StringBuilder deviceSummary = new StringBuilder();
         for (int deviceId : InputDevice.getDeviceIds()) {
             InputDevice device = InputDevice.getDevice(deviceId);
-            if (device == null || device.isVirtual()) {
+            if (device == null) {
                 continue;
             }
             int sources = device.getSources();
             boolean gamepad = (sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD;
             boolean joystick = (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK;
-            if (gamepad || joystick) {
-                return true;
+            if (!gamepad && !joystick) {
+                continue;
             }
+            ++candidateCount;
+
+            boolean[] supportedButtons = device.hasKeys(
+                    KeyEvent.KEYCODE_BUTTON_A,
+                    KeyEvent.KEYCODE_BUTTON_B,
+                    KeyEvent.KEYCODE_BUTTON_X,
+                    KeyEvent.KEYCODE_BUTTON_Y,
+                    KeyEvent.KEYCODE_BUTTON_START,
+                    KeyEvent.KEYCODE_BUTTON_SELECT,
+                    KeyEvent.KEYCODE_BUTTON_L1,
+                    KeyEvent.KEYCODE_BUTTON_R1);
+            int supportedButtonCount = 0;
+            for (boolean supported : supportedButtons) {
+                if (supported) {
+                    ++supportedButtonCount;
+                }
+            }
+
+            int joystickAxisCount = 0;
+            for (InputDevice.MotionRange range : device.getMotionRanges()) {
+                if ((range.getSource() & InputDevice.SOURCE_CLASS_JOYSTICK) != 0
+                        && range.getAxis() != MotionEvent.AXIS_HAT_X
+                        && range.getAxis() != MotionEvent.AXIS_HAT_Y) {
+                    ++joystickAxisCount;
+                }
+            }
+
+            boolean deviceEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1
+                    || device.isEnabled();
+            boolean deviceExternal = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                    || device.isExternal();
+            boolean accepted = !device.isVirtual()
+                    && deviceEnabled
+                    && deviceExternal
+                    && supportedButtonCount > 0
+                    && (gamepad || joystickAxisCount >= 2);
+            if (accepted) {
+                physicalControllerFound = true;
+            }
+
+            if (deviceSummary.length() > 0) {
+                deviceSummary.append(';');
+            }
+            deviceSummary.append("id=").append(deviceId)
+                    .append(",name=").append(sanitizeDeviceName(device.getName()))
+                    .append(",sources=0x").append(Integer.toHexString(sources))
+                    .append(",vendor=").append(device.getVendorId())
+                    .append(",product=").append(device.getProductId())
+                    .append(",virtual=").append(device.isVirtual() ? 1 : 0)
+                    .append(",enabled=").append(deviceEnabled ? 1 : 0)
+                    .append(",external=").append(deviceExternal ? 1 : 0)
+                    .append(",buttons=").append(supportedButtonCount)
+                    .append(",axes=").append(joystickAxisCount)
+                    .append(",accepted=").append(accepted ? 1 : 0);
         }
-        return false;
+
+        String summary = "accepted=" + (physicalControllerFound ? 1 : 0)
+                + " candidates=" + candidateCount
+                + " devices=" + (deviceSummary.length() > 0 ? deviceSummary : "none");
+        if (!summary.equals(lastInputDeviceSummary)) {
+            lastInputDeviceSummary = summary;
+            Log.i(TAG, "BARONY_ANDROID_INPUT_DEVICE_SCAN " + summary);
+        }
+        return physicalControllerFound;
+    }
+
+    private static String sanitizeDeviceName(String name) {
+        if (name == null || name.isEmpty()) {
+            return "unknown";
+        }
+        return name.replace('\n', '_').replace('\r', '_').replace(';', '_').replace(',', '_');
     }
 
     private void registerVirtualController() {

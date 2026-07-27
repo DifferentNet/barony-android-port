@@ -1247,7 +1247,7 @@ void glEndCamera(view_t* camera, bool useHDR, map_t& map)
             hdr_limit_low, hdr_exposure / defaultLuminance), hdr_limit_high);
         static bool loggedAndroidHdrMode = false;
         if (!loggedAndroidHdrMode) {
-            SDL_Log("BARONY_ANDROID_HDR_MODE mode=fixed-exposure readback=disabled luminance=%.3f exposure=%.3f",
+            SDL_Log("BARONY_ANDROID_HDR_MODE mode=fixed-exposure readback=disabled color=RGBA8 luminance=%.3f exposure=%.3f",
                 defaultLuminance, exposure);
             loggedAndroidHdrMode = true;
         }
@@ -2619,6 +2619,13 @@ const char* gl_error_string(GLenum err) {
     case GL_INVALID_OPERATION:
         assert(0 && "GL_INVALID_OPERATION");
         return "GL_INVALID_OPERATION";
+    case GL_OUT_OF_MEMORY:
+#ifdef ANDROID
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+            "BARONY_ANDROID_GL_OUT_OF_MEMORY");
+#endif
+        assert(0 && "GL_OUT_OF_MEMORY");
+        return "GL_OUT_OF_MEMORY";
 #ifndef ANDROID
     case GL_STACK_OVERFLOW:
         assert(0 && "GL_STACK_OVERFLOW");
@@ -2626,9 +2633,6 @@ const char* gl_error_string(GLenum err) {
     case GL_STACK_UNDERFLOW:
         assert(0 && "GL_STACK_UNDERFLOW");
         return "GL_STACK_UNDERFLOW";
-    case GL_OUT_OF_MEMORY:
-        assert(0 && "GL_OUT_OF_MEMORY");
-        return "GL_OUT_OF_MEMORY";
     case GL_TABLE_TOO_LARGE:
         assert(0 && "GL_TABLE_TOO_LARGE");
         return "GL_TABLE_TOO_LARGE";
@@ -2658,7 +2662,23 @@ void GO_SwapBuffers(SDL_Window* screen)
     
 #ifndef EDITOR
     // enable HDR if desired
-    hdrEnabled = *MainMenu::cvar_hdrEnabled;
+    const bool requestedHdr = *MainMenu::cvar_hdrEnabled;
+#ifdef ANDROID
+    if (!requestedHdr && !main_framebuffer.fbo) {
+        main_framebuffer.init(xres, yres, GL_NEAREST, GL_NEAREST);
+        SDL_Log("BARONY_ANDROID_MAIN_FRAMEBUFFER_READY reason=hdr-disabled size=%dx%d",
+            xres, yres);
+    }
+    if (requestedHdr && !hdrEnabled && main_framebuffer.fbo) {
+        main_framebuffer.unbindForReading();
+        main_framebuffer.destroy();
+        SDL_Log("BARONY_ANDROID_MAIN_FRAMEBUFFER_RELEASED reason=hdr-enabled");
+    }
+    if (!requestedHdr && hdrEnabled) {
+        SDL_Log("BARONY_ANDROID_HDR_MODE mode=disabled color=RGBA8");
+    }
+#endif
+    hdrEnabled = requestedHdr;
 #endif
     
     if (!hdrEnabled) {

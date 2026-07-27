@@ -478,14 +478,38 @@ int initApp(char const * const title, int fullscreen)
 #ifdef ANDROID
 	SDL_Log("BARONY_ANDROID_GL_ES_READY vendor=%s renderer=%s version=%s",
 		glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION));
+    GLint maxTextureSize = 0;
+    GLint maxRenderbufferSize = 0;
+    GLint maxViewportDimensions[2] = { 0, 0 };
+    GL_CHECK_ERR(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize));
+    GL_CHECK_ERR(glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &maxRenderbufferSize));
+    GL_CHECK_ERR(glGetIntegerv(GL_MAX_VIEWPORT_DIMS, maxViewportDimensions));
+    const bool colorBufferHalfFloat =
+        SDL_GL_ExtensionSupported("GL_EXT_color_buffer_half_float") == SDL_TRUE;
+    const bool colorBufferFloat =
+        SDL_GL_ExtensionSupported("GL_EXT_color_buffer_float") == SDL_TRUE;
+    SDL_Log("BARONY_ANDROID_GL_CAPS colorBufferHalfFloat=%d colorBufferFloat=%d maxTextureSize=%d maxRenderbufferSize=%d maxViewport=%dx%d",
+        colorBufferHalfFloat ? 1 : 0,
+        colorBufferFloat ? 1 : 0,
+        maxTextureSize,
+        maxRenderbufferSize,
+        maxViewportDimensions[0],
+        maxViewportDimensions[1]);
+    SDL_Log("BARONY_ANDROID_FRAMEBUFFER_POLICY color=RGBA8 depth=DEPTH24_STENCIL8_RENDERBUFFER hdrReadback=disabled mainFramebuffer=lazy");
 #endif
 #endif
 
 	createCommonDrawResources();
+#ifdef ANDROID
+    if (!hdrEnabled) {
+#endif
 	main_framebuffer.init(xres, yres, GL_NEAREST, GL_NEAREST);
     if (!hdrEnabled) {
         main_framebuffer.bindForWriting();
     }
+#ifdef ANDROID
+    }
+#endif
     GL_CHECK_ERR(glClearColor(0.f, 0.f, 0.f, 1.f));
     GL_CHECK_ERR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
@@ -1806,7 +1830,15 @@ bool changeVideoMode(int new_xres, int new_yres)
     if (!hdrEnabled) {
         main_framebuffer.unbindForWriting();
     }
+#ifdef ANDROID
+    if (!hdrEnabled) {
+#endif
 	main_framebuffer.init(xres, yres, GL_NEAREST, GL_NEAREST);
+#ifdef ANDROID
+    } else {
+        main_framebuffer.destroy();
+    }
+#endif
     if (!hdrEnabled) {
         main_framebuffer.bindForWriting();
     }
@@ -1845,7 +1877,15 @@ bool resizeWindow(int new_xres, int new_yres)
     if (!hdrEnabled) {
         main_framebuffer.unbindForWriting();
     }
+#ifdef ANDROID
+    if (!hdrEnabled) {
+#endif
 	main_framebuffer.init(xres, yres, GL_NEAREST, GL_NEAREST);
+#ifdef ANDROID
+    } else {
+        main_framebuffer.destroy();
+    }
+#endif
     if (!hdrEnabled) {
         main_framebuffer.bindForWriting();
     }

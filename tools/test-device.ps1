@@ -15,6 +15,18 @@ $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $PackageName = 'com.zhdan.baronyport'
 $LauncherComponent = 'com.zhdan.baronyport/.BaronyActivity'
+$LogcatArguments = @(
+    'logcat', '-d', '-v', 'threadtime',
+    'BaronyAndroid:I',
+    'BaronyTouch:I',
+    'SDL/APP:V',
+    'SDL:V',
+    'AndroidRuntime:E',
+    'ActivityManager:E',
+    'libc:F',
+    'DEBUG:F',
+    '*:S'
+)
 
 $AndroidSdk = if ($env:ANDROID_SDK_ROOT) {
     $env:ANDROID_SDK_ROOT
@@ -197,12 +209,19 @@ Invoke-Adb -Arguments @('shell', 'am', 'force-stop', $PackageName) | Out-Null
 Write-Host "Launching: $LauncherComponent"
 $LaunchOutput = @(Invoke-Adb -Arguments @('shell', 'am', 'start', '-W', '-n', $LauncherComponent))
 $LaunchOutput | Set-Content -LiteralPath (Join-Path $OutputDirectory 'launch.txt') -Encoding UTF8
+$PackageDetails = @(Invoke-Adb -Arguments @(
+    'shell', 'dumpsys', 'package', $PackageName
+)) -join [Environment]::NewLine
+$InstalledBuildIsDebuggable = $PackageDetails -match 'flags=\[[^\]]*DEBUGGABLE'
 
 $RequiredMarkers = @(
     'BARONY_ANDROID_RUNTIME_ACTIVITY_READY',
     'BARONY_ANDROID_GAME_ENTRY',
     'BARONY_ANDROID_PATHS_READY',
     'BARONY_ANDROID_GL_ES_READY',
+    'BARONY_ANDROID_GL_CAPS',
+    'BARONY_ANDROID_FRAMEBUFFER_POLICY',
+    'BARONY_ANDROID_FRAMEBUFFER_READY',
     'BARONY_ANDROID_GAME_INITIALIZED',
     'BARONY_ANDROID_MAIN_MENU_READY'
 )
@@ -216,19 +235,68 @@ $AudioMarkers = @(
     'BARONY_ANDROID_AUDIO_STREAM_RECOVERED',
     'BARONY_ANDROID_AUDIO_CHANNELS'
 )
+$RendererMarkers = @(
+    'BARONY_ANDROID_GL_CAPS',
+    'BARONY_ANDROID_FRAMEBUFFER_POLICY',
+    'BARONY_ANDROID_FRAMEBUFFER_READY',
+    'BARONY_ANDROID_LIGHTMAP_FORMAT',
+    'BARONY_ANDROID_HDR_MODE'
+)
+$InputMarkers = @(
+    'BARONY_ANDROID_INPUT_DEVICE_SCAN',
+    'BARONY_ANDROID_TOUCH_VISIBILITY',
+    'BARONY_ANDROID_TOUCH_LAYOUT'
+)
 
 $StartupDeadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
 $AppProcessId = $null
 $StartupLogText = ''
-Write-Host "Waiting up to $StartupTimeoutSeconds seconds for the main-menu markers..."
+$ObservedStartupMarkers = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal
+)
+$ObservedDiagnosticMarkers = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal
+)
+Write-Host "Waiting up to $StartupTimeoutSeconds seconds for startup, renderer, and input markers..."
 do {
     $CandidateProcessId = Get-AppProcessId
     if ($CandidateProcessId) {
         $AppProcessId = $CandidateProcessId
     }
-    $StartupLogText = (@(Invoke-Adb -Arguments @('logcat', '-d', '-v', 'threadtime')) -join [Environment]::NewLine)
-    $MissingAtStartup = @($RequiredMarkers | Where-Object { $StartupLogText -notmatch [regex]::Escape($_) })
-    if ($MissingAtStartup.Count -eq 0) {
+    $StartupLogText = (@(Invoke-Adb -Arguments $LogcatArguments) -join [Environment]::NewLine)
+    if ($InstalledBuildIsDebuggable) {
+        $StartupGameMarkers = @(Invoke-Adb -Arguments @(
+            'shell', 'run-as', $PackageName,
+            'grep', 'BARONY_ANDROID_', 'files/barony-output/log.txt'
+        ) -AllowFailure)
+        $StartupLogText += [Environment]::NewLine + (
+            $StartupGameMarkers -join [Environment]::NewLine
+        )
+    }
+    foreach ($Marker in $RequiredMarkers) {
+        if ($StartupLogText -match [regex]::Escape($Marker)) {
+            [void]$ObservedStartupMarkers.Add($Marker)
+        }
+    }
+    foreach ($Marker in @($RendererMarkers + $InputMarkers + $AudioMarkers)) {
+        if ($StartupLogText -match [regex]::Escape($Marker)) {
+            [void]$ObservedDiagnosticMarkers.Add($Marker)
+        }
+    }
+    $MissingAtStartup = @($RequiredMarkers | Where-Object {
+        -not $ObservedStartupMarkers.Contains($_)
+    })
+    $MissingRendererAtStartup = @($RendererMarkers | Where-Object {
+        -not $ObservedDiagnosticMarkers.Contains($_)
+    })
+    $MissingInputAtStartup = @($InputMarkers | Where-Object {
+        -not $ObservedDiagnosticMarkers.Contains($_)
+    })
+    if (
+        $MissingAtStartup.Count -eq 0 -and
+        $MissingRendererAtStartup.Count -eq 0 -and
+        $MissingInputAtStartup.Count -eq 0
+    ) {
         break
     }
     Start-Sleep -Seconds 2
@@ -259,12 +327,10 @@ if ($DurationMinutes -gt 0) {
     Write-Progress -Activity 'Barony physical-device test' -Completed
 }
 
-$LogcatLines = @(Invoke-Adb -Arguments @('logcat', '-d', '-v', 'threadtime'))
+$LogcatLines = @(Invoke-Adb -Arguments $LogcatArguments)
 $LogcatPath = Join-Path $OutputDirectory 'logcat.txt'
 $LogcatLines | Set-Content -LiteralPath $LogcatPath -Encoding UTF8
 $LogText = $LogcatLines -join [Environment]::NewLine
-$PackageDetails = @(Invoke-Adb -Arguments @('shell', 'dumpsys', 'package', $PackageName)) -join [Environment]::NewLine
-$InstalledBuildIsDebuggable = $PackageDetails -match 'flags=\[[^\]]*DEBUGGABLE'
 $GameLogLines = if ($InstalledBuildIsDebuggable) {
     @(Invoke-Adb -Arguments @(
         'shell', 'run-as', $PackageName, 'cat', 'files/barony-output/log.txt'
@@ -278,6 +344,11 @@ $GameLogLines | Set-Content -LiteralPath $GameLogPath -Encoding UTF8
 $GameLogText = $GameLogLines -join [Environment]::NewLine
 $CombinedLogText = $LogText + [Environment]::NewLine + $GameLogText
 
+$MemoryInfoLines = @(Invoke-Adb -Arguments @(
+    'shell', 'dumpsys', 'meminfo', $PackageName
+) -AllowFailure)
+$MemoryInfoLines | Set-Content -LiteralPath (Join-Path $OutputDirectory 'meminfo.txt') -Encoding UTF8
+
 $AudioFlingerEnd = @(Invoke-Adb -Arguments @('shell', 'dumpsys', 'media.audio_flinger') -AllowFailure)
 $AudioFlingerEnd | Set-Content -LiteralPath (Join-Path $OutputDirectory 'audioflinger-end.txt') -Encoding UTF8
 $EndUnderruns = if ($AppProcessId) {
@@ -287,10 +358,38 @@ else {
     $null
 }
 
-$MissingMarkers = @($RequiredMarkers | Where-Object { $LogText -notmatch [regex]::Escape($_) })
-$ObservedAudioMarkers = @($AudioMarkers | Where-Object { $CombinedLogText -match [regex]::Escape($_) })
-$MissingAudioMarkers = @($AudioMarkers | Where-Object { $CombinedLogText -notmatch [regex]::Escape($_) })
-$CrashPattern = 'FATAL EXCEPTION|Fatal signal|ANR in com\.zhdan\.baronyport|am_crash|BARONY_ANDROID_STARTUP_FAILED'
+foreach ($Marker in $RequiredMarkers) {
+    if ($LogText -match [regex]::Escape($Marker)) {
+        [void]$ObservedStartupMarkers.Add($Marker)
+    }
+}
+foreach ($Marker in @($RendererMarkers + $InputMarkers + $AudioMarkers)) {
+    if ($CombinedLogText -match [regex]::Escape($Marker)) {
+        [void]$ObservedDiagnosticMarkers.Add($Marker)
+    }
+}
+$MissingMarkers = @($RequiredMarkers | Where-Object {
+    -not $ObservedStartupMarkers.Contains($_)
+})
+$ObservedAudioMarkers = @($AudioMarkers | Where-Object {
+    $ObservedDiagnosticMarkers.Contains($_)
+})
+$MissingAudioMarkers = @($AudioMarkers | Where-Object {
+    -not $ObservedDiagnosticMarkers.Contains($_)
+})
+$ObservedRendererMarkers = @($RendererMarkers | Where-Object {
+    $ObservedDiagnosticMarkers.Contains($_)
+})
+$MissingRendererMarkers = @($RendererMarkers | Where-Object {
+    -not $ObservedDiagnosticMarkers.Contains($_)
+})
+$ObservedInputMarkers = @($InputMarkers | Where-Object {
+    $ObservedDiagnosticMarkers.Contains($_)
+})
+$MissingInputMarkers = @($InputMarkers | Where-Object {
+    -not $ObservedDiagnosticMarkers.Contains($_)
+})
+$CrashPattern = 'FATAL EXCEPTION|Fatal signal|ANR in com\.zhdan\.baronyport|am_crash|BARONY_ANDROID_STARTUP_FAILED|BARONY_ANDROID_FRAMEBUFFER_INCOMPLETE|BARONY_ANDROID_SHADER_(?:COMPILE|LINK)_FAILED|BARONY_ANDROID_GL_OUT_OF_MEMORY|GL_INVALID_FRAMEBUFFER_OPERATION'
 $CrashLines = @($LogcatLines + $GameLogLines | Where-Object { $_ -match $CrashPattern })
 
 $ChannelSamples = [System.Collections.Generic.List[object]]::new()
@@ -323,7 +422,10 @@ else {
 }
 $StreamRecoveries = ([regex]::Matches($CombinedLogText, 'BARONY_ANDROID_AUDIO_STREAM_RECOVERED')).Count
 $AppStillRunning = $null -ne (Get-AppProcessId)
-$Failed = $MissingMarkers.Count -gt 0 -or $CrashLines.Count -gt 0
+$Failed = $MissingMarkers.Count -gt 0 `
+    -or $MissingRendererMarkers.Count -gt 0 `
+    -or $MissingInputMarkers.Count -gt 0 `
+    -or $CrashLines.Count -gt 0
 $AudioWarning = $null -ne $UnderrunDelta -and $UnderrunDelta -gt 0
 $Verdict = if ($Failed) {
     'FAIL'
@@ -342,6 +444,10 @@ $Summary.Add("app_pid=$AppProcessId")
 $Summary.Add("app_running_at_end=$AppStillRunning")
 $Summary.Add("duration_minutes=$DurationMinutes")
 $Summary.Add("required_markers_missing=$($MissingMarkers -join ',')")
+$Summary.Add("renderer_diagnostics_observed=$($ObservedRendererMarkers -join ',')")
+$Summary.Add("renderer_diagnostics_missing=$($MissingRendererMarkers -join ',')")
+$Summary.Add("input_diagnostics_observed=$($ObservedInputMarkers -join ',')")
+$Summary.Add("input_diagnostics_missing=$($MissingInputMarkers -join ',')")
 $Summary.Add("audio_diagnostics_observed=$($ObservedAudioMarkers -join ',')")
 $Summary.Add("audio_diagnostics_not_observed=$($MissingAudioMarkers -join ',')")
 $Summary.Add("audio_underruns_start=$StartUnderruns")
@@ -358,6 +464,8 @@ $Summary | Set-Content -LiteralPath $SummaryPath -Encoding UTF8
 Write-Host ''
 Write-Host "Result: $Verdict"
 Write-Host "Required startup markers: $($RequiredMarkers.Count - $MissingMarkers.Count)/$($RequiredMarkers.Count)"
+Write-Host "Renderer diagnostics observed: $($ObservedRendererMarkers.Count)/$($RendererMarkers.Count)"
+Write-Host "Input diagnostics observed: $($ObservedInputMarkers.Count)/$($InputMarkers.Count)"
 Write-Host "Audio diagnostics observed: $($ObservedAudioMarkers.Count)/$($AudioMarkers.Count)"
 if ($null -ne $UnderrunDelta) {
     Write-Host "Maximum app-track underrun frames: $StartUnderruns -> $EndUnderruns (delta $UnderrunDelta)"
@@ -370,6 +478,12 @@ if ($ChannelSamples.Count) {
 }
 if ($MissingMarkers.Count) {
     Write-Warning "Missing required markers: $($MissingMarkers -join ', ')"
+}
+if ($MissingRendererMarkers.Count) {
+    Write-Warning "Missing renderer diagnostics: $($MissingRendererMarkers -join ', ')"
+}
+if ($MissingInputMarkers.Count) {
+    Write-Warning "Missing input diagnostics: $($MissingInputMarkers -join ', ')"
 }
 if ($CrashLines.Count) {
     Write-Warning "Potential crash/startup-failure lines: $($CrashLines.Count)"

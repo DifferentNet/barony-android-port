@@ -119,8 +119,14 @@ void Frame::fboInit() {
     }
 #endif
 #ifndef NINTENDO
+#ifdef ANDROID
+    // The optional up/downscale buffers can be much larger than the display
+    // and are disabled by default. Allocate them lazily only when selected.
+    // This avoids reserving a large unused render target on mobile GPUs.
+#else
     gui_fb_upscaled.init(Frame::virtualScreenX * 3, Frame::virtualScreenY * 3, GL_LINEAR, GL_NEAREST); // 4k resolution
     gui_fb_downscaled.init(Frame::virtualScreenX / 2, Frame::virtualScreenY / 2, GL_LINEAR, GL_NEAREST); // 360p resolution
+#endif
 #endif
 }
 
@@ -327,6 +333,11 @@ void Frame::postdraw() {
     gui_fb.unbindForWriting();
     gui_fb.bindForReading();
     if (*ui_downscale) {
+#ifdef ANDROID
+        gui_fb_downscaled.init(
+            Frame::virtualScreenX / 2, Frame::virtualScreenY / 2,
+            GL_LINEAR, GL_NEAREST);
+#endif
         gui_fb_downscaled.bindForWriting();
         GL_CHECK_ERR(glClearColor(0.f, 0.f, 0.f, 0.f));
         GL_CHECK_ERR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -336,6 +347,11 @@ void Frame::postdraw() {
         gui_fb_downscaled.draw();
     }
     else if (*ui_upscale) {
+#ifdef ANDROID
+        gui_fb_upscaled.init(
+            Frame::virtualScreenX * 3, Frame::virtualScreenY * 3,
+            GL_LINEAR, GL_NEAREST);
+#endif
         gui_fb_upscaled.bindForWriting();
         GL_CHECK_ERR(glClearColor(0.f, 0.f, 0.f, 0.f));
         GL_CHECK_ERR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));

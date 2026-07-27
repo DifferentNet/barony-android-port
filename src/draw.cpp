@@ -834,9 +834,29 @@ void framebuffer::init(unsigned int _xsize, unsigned int _ysize, GLint minFilter
     GL_CHECK_ERR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
     GL_CHECK_ERR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter));
     GL_CHECK_ERR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter));
+#ifdef ANDROID
+    // RGBA16F is texture-only in core GLES 3.0 and requires optional
+    // color-buffer support to be renderable. Some mobile drivers advertise
+    // that extension but corrupt large render targets under sustained load.
+    // Keep Android on the core color-renderable path; the fixed-exposure pass
+    // still preserves the intended presentation without framebuffer readback.
+    GL_CHECK_ERR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
+        xsize, ysize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
+#else
 	GL_CHECK_ERR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, xsize, ysize, 0, GL_RGBA, GL_HALF_FLOAT, nullptr));
+#endif
     GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, 0));
 
+#ifdef ANDROID
+    // The depth/stencil attachment is never sampled. A renderbuffer keeps the
+    // attachment on the core tile-rendering path instead of exposing it as an
+    // unnecessary texture on mobile drivers.
+    GL_CHECK_ERR(glGenRenderbuffers(1, &fbo_depth));
+    GL_CHECK_ERR(glBindRenderbuffer(GL_RENDERBUFFER, fbo_depth));
+    GL_CHECK_ERR(glRenderbufferStorage(
+        GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, xsize, ysize));
+    GL_CHECK_ERR(glBindRenderbuffer(GL_RENDERBUFFER, 0));
+#else
     GL_CHECK_ERR(glGenTextures(1, &fbo_depth));
     GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, fbo_depth));
     GL_CHECK_ERR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -846,22 +866,28 @@ void framebuffer::init(unsigned int _xsize, unsigned int _ysize, GLint minFilter
     GL_CHECK_ERR(glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH32F_STENCIL8,
         xsize, ysize, 0, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, nullptr));
     GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, 0));
+#endif
     
     GL_CHECK_ERR(glGenFramebuffers(1, &fbo));
     GL_CHECK_ERR(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
     GL_CHECK_ERR(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_color, 0));
+#ifdef ANDROID
+    GL_CHECK_ERR(glFramebufferRenderbuffer(
+        GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fbo_depth));
+#else
     GL_CHECK_ERR(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, fbo_depth, 0));
+#endif
     static const GLenum attachments[] = {GL_COLOR_ATTACHMENT0};
     GL_CHECK_ERR(glDrawBuffers(sizeof(attachments) / sizeof(GLenum), attachments));
     GL_CHECK_ERR(glReadBuffer(GL_COLOR_ATTACHMENT0));
 
 #ifdef ANDROID
     const GLenum framebufferStatus = GL_CHECK_ERR_RET(glCheckFramebufferStatus(GL_FRAMEBUFFER));
-    SDL_Log("BARONY_ANDROID_FRAMEBUFFER_READY size=%ux%u status=0x%04x color=RGBA16F depth=DEPTH32F_STENCIL8",
+    SDL_Log("BARONY_ANDROID_FRAMEBUFFER_READY size=%ux%u status=0x%04x color=RGBA8 depth=DEPTH24_STENCIL8_RENDERBUFFER",
         xsize, ysize, framebufferStatus);
     if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-            "BARONY_ANDROID_FRAMEBUFFER_INCOMPLETE size=%ux%u status=0x%04x",
+            "BARONY_ANDROID_FRAMEBUFFER_INCOMPLETE size=%ux%u status=0x%04x color=RGBA8 depth=DEPTH24_STENCIL8_RENDERBUFFER",
             xsize, ysize, framebufferStatus);
     }
 #endif
@@ -870,6 +896,11 @@ void framebuffer::init(unsigned int _xsize, unsigned int _ysize, GLint minFilter
 }
 
 GLhalf* framebuffer::lock() {
+#ifdef ANDROID
+    // Android uses fixed exposure and never performs CPU/PBO framebuffer
+    // readback. Its framebuffer color storage is RGBA8, not half-float.
+    return nullptr;
+#else
     if (!fbo || mapped) {
         return nullptr;
     }
@@ -877,25 +908,21 @@ GLhalf* framebuffer::lock() {
     // map data from the current pixel buffer
     if (pbos[pboindex]) {
 		GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[pboindex]));
-#ifdef ANDROID
-		auto result = GL_CHECK_ERR_RET(glMapBufferRange(
-			GL_PIXEL_PACK_BUFFER,
-			0,
-			static_cast<GLsizeiptr>(xsize) * ysize * 4 * sizeof(GLhalf),
-			GL_MAP_READ_BIT));
-#else
 		auto result = GL_CHECK_ERR_RET(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-#endif
 		if (result) {
 			mapped = true;
 		}
 		return (GLhalf*)result;
-	} else {
+    } else {
 		return nullptr;
 	}
+#endif
 }
 
 void framebuffer::unlock() {
+#ifdef ANDROID
+    return;
+#else
     if (!fbo) {
         return;
     }
@@ -918,6 +945,7 @@ void framebuffer::unlock() {
     GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[pboindex]));
     GL_CHECK_ERR(glReadPixels(0, 0, xsize, ysize, GL_RGBA, GL_HALF_FLOAT, nullptr));
     GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
+#endif
 }
 
 void framebuffer::destroy() {
@@ -934,7 +962,11 @@ void framebuffer::destroy() {
         fbo_color = 0;
     }
     if (fbo_depth) {
+#ifdef ANDROID
+        GL_CHECK_ERR(glDeleteRenderbuffers(1, &fbo_depth));
+#else
         GL_CHECK_ERR(glDeleteTextures(1, &fbo_depth));
+#endif
         fbo_depth = 0;
     }
     for (int c = 0; c < NUM_PBOS; ++c) {
@@ -951,7 +983,12 @@ void framebuffer::bindForWriting() {
     if (fbo) {
         GL_CHECK_ERR(glBindFramebuffer(GL_FRAMEBUFFER, fbo));
         GL_CHECK_ERR(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_color, 0));
+#ifdef ANDROID
+        GL_CHECK_ERR(glFramebufferRenderbuffer(
+            GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fbo_depth));
+#else
         GL_CHECK_ERR(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, fbo_depth, 0));
+#endif
         GL_CHECK_ERR(glViewport(0, 0, xsize, ysize));
         fbStack.push_back(this);
     }

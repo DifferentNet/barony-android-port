@@ -827,6 +827,7 @@ void framebuffer::init(unsigned int _xsize, unsigned int _ysize, GLint minFilter
 	xsize = _xsize;
 	ysize = _ysize;
     
+    GL_CHECK_ERR(glActiveTexture(GL_TEXTURE0));
     GL_CHECK_ERR(glGenTextures(1, &fbo_color));
     GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, fbo_color));
     GL_CHECK_ERR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -853,6 +854,17 @@ void framebuffer::init(unsigned int _xsize, unsigned int _ysize, GLint minFilter
     static const GLenum attachments[] = {GL_COLOR_ATTACHMENT0};
     GL_CHECK_ERR(glDrawBuffers(sizeof(attachments) / sizeof(GLenum), attachments));
     GL_CHECK_ERR(glReadBuffer(GL_COLOR_ATTACHMENT0));
+
+#ifdef ANDROID
+    const GLenum framebufferStatus = GL_CHECK_ERR_RET(glCheckFramebufferStatus(GL_FRAMEBUFFER));
+    SDL_Log("BARONY_ANDROID_FRAMEBUFFER_READY size=%ux%u status=0x%04x color=RGBA16F depth=DEPTH32F_STENCIL8",
+        xsize, ysize, framebufferStatus);
+    if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+            "BARONY_ANDROID_FRAMEBUFFER_INCOMPLETE size=%ux%u status=0x%04x",
+            xsize, ysize, framebufferStatus);
+    }
+#endif
 
     GL_CHECK_ERR(glBindFramebuffer(GL_FRAMEBUFFER, 0));
 }
@@ -947,6 +959,7 @@ void framebuffer::bindForWriting() {
 
 void framebuffer::bindForReading() const {
     GL_CHECK_ERR(glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo));
+    GL_CHECK_ERR(glActiveTexture(GL_TEXTURE0));
     GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, fbo_color));
 }
 
@@ -980,6 +993,7 @@ void framebuffer::unbindForWriting() {
 
 void framebuffer::unbindForReading() {
     GL_CHECK_ERR(glBindFramebuffer(GL_READ_FRAMEBUFFER, 0));
+    GL_CHECK_ERR(glActiveTexture(GL_TEXTURE0));
     GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, 0));
 }
 

@@ -1236,6 +1236,22 @@ void glEndCamera(view_t* camera, bool useHDR, map_t& map)
         
         // calculate luminance
         camera->fb[fbIndex].bindForReading();
+#ifdef ANDROID
+        // Full-resolution half-float framebuffer readback is prohibitively
+        // expensive on tile-based mobile GPUs and is a suspected trigger for
+        // corrupted render tiles on some Adreno drivers. Preserve the HDR
+        // tone-mapping pass with the initial desktop exposure, but do not map
+        // or read back the framebuffer on Android.
+        camera->luminance = defaultLuminance;
+        const float exposure = std::min(std::max(
+            hdr_limit_low, hdr_exposure / defaultLuminance), hdr_limit_high);
+        static bool loggedAndroidHdrMode = false;
+        if (!loggedAndroidHdrMode) {
+            SDL_Log("BARONY_ANDROID_HDR_MODE mode=fixed-exposure readback=disabled luminance=%.3f exposure=%.3f",
+                defaultLuminance, exposure);
+            loggedAndroidHdrMode = true;
+        }
+#else
         auto pixels = camera->fb[fbIndex].lock();
         if (pixels) {
             // functor for crawling through the framebuffer collecting samples
@@ -1308,6 +1324,7 @@ void glEndCamera(view_t* camera, bool useHDR, map_t& map)
         }
         camera->fb[fbIndex].unlock();
         const float exposure = std::min(std::max(hdr_limit_low, hdr_exposure / camera->luminance), hdr_limit_high);
+#endif
         const auto& brightness = hdr_brightness;
         const float gamma = hdr_gamma * vidgamma;
         

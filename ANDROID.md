@@ -60,13 +60,17 @@ barony-data/
   npcnames-male.txt
   playernames-female.txt
   playernames-male.txt
-  scores.dat
-  scores_multiplayer.dat
 ```
 
 Copying the complete contents is acceptable for private use, although Windows
 executables, SDKs, `_barony-source`, videos, holiday themes, and `models.cache`
 are not used by the Android port and can be omitted.
+
+Score history is writable user state rather than required game data. Current
+Barony versions store it as `savegames/scores.json` and
+`savegames/scores_multiplayer.json` in the app's internal output directory.
+Do not rename those JSON files or copy legacy `scores.dat` files into
+`barony-data`.
 
 Return to the game and select **Retry**. When no deployment manifest is present,
 the app checks pinned hashes for the supported v5.0.2 data and creates the
@@ -130,6 +134,10 @@ Mouse and keyboard input are also supported through Android.
 - Offline single-player is the tested mode.
 - Steamworks, EOS, PlayFab, achievements, workshop integration, and voice chat are disabled.
 - Controller glyph selection has not been verified across a broad range of controller models.
+- HDR tone mapping uses fixed exposure on Android. Adaptive eye adjustment is
+  disabled because the desktop implementation reads a full-resolution
+  half-float framebuffer back to the CPU every frame, which is unsuitable for
+  tile-based mobile GPUs.
 - Direct game-data copying depends on whether the phone exposes its app-specific
   `Android/data` folder. The reliable fallback requires Windows, PowerShell, and
   ADB.

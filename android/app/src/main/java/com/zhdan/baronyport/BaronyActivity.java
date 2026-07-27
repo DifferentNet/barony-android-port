@@ -48,8 +48,6 @@ public final class BaronyActivity extends SDLActivity {
             "npcnames-male.txt",
             "playernames-female.txt",
             "playernames-male.txt",
-            "scores.dat",
-            "scores_multiplayer.dat",
             "lang/en.txt",
             "images/system/font8x8.png",
             "maps/start.lmp",

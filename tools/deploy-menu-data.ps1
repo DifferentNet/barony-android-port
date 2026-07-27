@@ -15,9 +15,7 @@ $RequiredFiles = @(
     'npcnames-female.txt',
     'npcnames-male.txt',
     'playernames-female.txt',
-    'playernames-male.txt',
-    'scores.dat',
-    'scores_multiplayer.dat'
+    'playernames-male.txt'
 )
 $ExpectedCriticalHashes = [ordered]@{
     'lang/en.txt' = '153ef608caafea9226db4e006ad8d778bfe675cf006227efe0fb5c5cac551f40'

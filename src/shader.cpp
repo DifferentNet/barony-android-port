@@ -69,7 +69,14 @@ bool Shader::compile(const char* source, size_t len, Shader::Type type) {
     switch (type) {
     default: return false;
     case Shader::Type::Vertex: glType = GL_VERTEX_SHADER; break;
-    case Shader::Type::Geometry: glType = GL_GEOMETRY_SHADER; break;
+    case Shader::Type::Geometry:
+#ifdef ANDROID
+        printlog("Geometry shaders are unavailable in the Android GLES3 compile target.\n");
+        return false;
+#else
+        glType = GL_GEOMETRY_SHADER;
+        break;
+#endif
     case Shader::Type::Fragment: glType = GL_FRAGMENT_SHADER; break;
     }
 
@@ -78,7 +85,11 @@ bool Shader::compile(const char* source, size_t len, Shader::Type type) {
     // see https://www.khronos.org/opengl/wiki/Core_Language_(GLSL)
     // for more details
     
+#ifdef ANDROID
+    const char version[] = "#version 300 es\nprecision highp float;\nprecision highp int;\n";
+#else
     const char version[] = "#version 150 core\n";
+#endif
     const char* sources[2] = {version, source};
     const int lens[2] = {(int)sizeof(version) - 1, (int)len};
     

@@ -543,6 +543,7 @@ extern OPENAL_BUFFER* hamletmusic;
 #define NUMCAVESMUSIC 3
 #define NUMCITADELMUSIC 3
 #define NUMINTROMUSIC 3
+#define NUMFORTRESSMUSIC 2
 //TODO: Automatically scan the music folder for a mines subdirectory and use all the music for the mines or something like that. I'd prefer something neat like for that loading music for a level, anyway. And I can just reuse the code I had for ORR.
 
 extern OPENAL_SOUND* music_channel, *music_channel2, *music_resume; //TODO: List of music, play first one, fade out all the others? Eh, maybe some other day. //music_resume is the music to resume after, say, combat or shops. //TODO: Clear music_resume every biome change. Or otherwise validate it for that level set.
@@ -560,9 +561,12 @@ OPENAL_SOUND* playSoundPosLocal(real_t x, real_t y, Uint16 snd, Uint8 vol);
 OPENAL_SOUND* playSoundEntity(Entity* entity, Uint16 snd, Uint8 vol);
 OPENAL_SOUND* playSoundEntityLocal(Entity* entity, Uint16 snd, Uint8 vol);
 OPENAL_SOUND* playSound(Uint16 snd, Uint8 vol);
+OPENAL_SOUND* playSoundNotification(Uint16 snd, Uint8 vol);
+OPENAL_SOUND* playSoundNotificationPlayer(int player, Uint16 snd, Uint8 vol);
 OPENAL_SOUND* playSoundVelocity(); //TODO: Write.
 
 void playmusic(OPENAL_BUFFER* sound, bool loop, bool crossfade, bool resume); //Automatically crossfades. NOTE: Resets fadein and fadeout increments to the defaults every time it is called. You'll have to change the fadein and fadeout increments AFTER calling this function.
+#define playMusic playmusic
 
 void handleLevelMusic(); //Manages and updates the level music.
 
@@ -571,6 +575,9 @@ int OPENAL_CreateStreamSound(const char* name, OPENAL_BUFFER **buffer);
 
 void OPENAL_ChannelGroup_Stop(OPENAL_CHANNELGROUP* group);
 void OPENAL_ChannelGroup_SetVolume(OPENAL_CHANNELGROUP* group, float f);
+bool OPENAL_ChannelGroup_IsPlayingNear(OPENAL_CHANNELGROUP* group, float volume,
+	float x, float y, float z, float maxDistanceSquared);
+bool OPENAL_Listener_IsNear(float x, float y, float z, float maxDistanceSquared);
 void OPENAL_Channel_SetChannelGroup(OPENAL_SOUND *channel, OPENAL_CHANNELGROUP *group);
 void OPENAL_Channel_SetVolume(OPENAL_SOUND *channel, float f);
 void OPENAL_Channel_Stop(void* channel);
@@ -584,6 +591,7 @@ void OPENAL_SetLoop(OPENAL_SOUND* channel, ALboolean looping);
 void OPENAL_Channel_GetPosition(OPENAL_SOUND* channel, unsigned int *position);
 void OPENAL_Sound_GetLength(OPENAL_BUFFER* buffer, unsigned int *length);
 void OPENAL_Sound_Release(OPENAL_BUFFER* buffer);
+void freeOpenALMusic();
 
 extern float fadein_increment, fadeout_increment, default_fadein_increment, default_fadeout_increment;
 #else

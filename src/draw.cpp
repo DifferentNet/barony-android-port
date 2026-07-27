@@ -601,7 +601,7 @@ void createCommonDrawResources() {
         "vec2 LightCoord = WorldPos.xz / (uMapDims.xy * 32.0);"
         "vec4 Lightmap = texture(uLightmap, LightCoord);"
         "FragColor = Texture * uLightFactor * (Lightmap + uLightColor) + uColorAdd;"
-        "if (FragColor.a <= 0) discard;"
+        "if (FragColor.a <= 0.0) discard;"
         
         "if (uFogDistance > 0.0) {"
         "float dist = length(uCameraPos.xyz - WorldPos.xyz);"
@@ -648,7 +648,7 @@ void createCommonDrawResources() {
         "vec2 LightCoord = WorldPos.xz / (uMapDims.xy * 32.0);"
         "vec4 Lightmap = texture(uLightmap, LightCoord);"
         "FragColor = Texture * uLightFactor * (Lightmap + uLightColor) + uColorAdd;"
-        "if (FragColor.a <= 0) discard;"
+        "if (FragColor.a <= 0.0) discard;"
         
         "if (uFogDistance > 0.0) {"
         "float dist = length(uCameraPos.xyz - WorldPos.xyz);"
@@ -677,7 +677,7 @@ void createCommonDrawResources() {
         "void main() {"
         "vec4 Texture = texture(uTexture, TexCoord);"
         "FragColor = Texture * uLightFactor * uLightColor + uColorAdd;"
-        "if (FragColor.a <= 0) discard;"
+        "if (FragColor.a <= 0.0) discard;"
         
         "if (uFogDistance > 0.0) {"
         "float dist = length(uCameraPos.xyz - WorldPos.xyz);"
@@ -865,7 +865,15 @@ GLhalf* framebuffer::lock() {
     // map data from the current pixel buffer
     if (pbos[pboindex]) {
 		GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[pboindex]));
+#ifdef ANDROID
+		auto result = GL_CHECK_ERR_RET(glMapBufferRange(
+			GL_PIXEL_PACK_BUFFER,
+			0,
+			static_cast<GLsizeiptr>(xsize) * ysize * 4 * sizeof(GLhalf),
+			GL_MAP_READ_BIT));
+#else
 		auto result = GL_CHECK_ERR_RET(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+#endif
 		if (result) {
 			mapped = true;
 		}
@@ -1168,6 +1176,19 @@ draws an arc with a changing radius
 
 static void drawScalingFilledArc(int x, int y, real_t radius1, real_t radius2, real_t angle1, real_t angle2, Uint32 inner_color, Uint32 outer_color)
 {
+#ifdef ANDROID
+    // The desktop implementation uses a geometry shader. The filled gear arc
+    // is decorative, so omit it on the OpenGL ES 3.0 path.
+    (void)x;
+    (void)y;
+    (void)radius1;
+    (void)radius2;
+    (void)angle1;
+    (void)angle2;
+    (void)inner_color;
+    (void)outer_color;
+    return;
+#else
     // initialize shader if needed, then bind
     if (!gearShader.isInitialized()) {
         static const char v_glsl[] =
@@ -1270,6 +1291,7 @@ static void drawScalingFilledArc(int x, int y, real_t radius1, real_t radius2, r
     
     // reset GL state
     GL_CHECK_ERR(glDisable(GL_BLEND));
+#endif
 }
 
 /*-------------------------------------------------------------------------------

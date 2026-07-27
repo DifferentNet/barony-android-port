@@ -52,6 +52,9 @@
 #include "ui/Image.hpp"
 #include "ui/MainMenu.hpp"
 #include "ui/LoadingScreen.hpp"
+#ifdef ANDROID
+#include "android_touch_bridge.hpp"
+#endif
 
 #include "UnicodeDecoder.h"
 
@@ -7091,6 +7094,13 @@ static void doConsoleCommands() {
 
 int main(int argc, char** argv)
 {
+#ifdef ANDROID
+	SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
+	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "0");
+	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+	SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
+	SDL_Log("BARONY_ANDROID_GAME_ENTRY");
+#endif
 #ifdef WINDOWS
 	SetUnhandledExceptionFilter(unhandled_handler);
 #ifdef _DEBUG
@@ -7192,6 +7202,9 @@ int main(int argc, char** argv)
 		strcpy(outputdir, "./");
 #else
  #ifndef NINTENDO
+#ifdef ANDROID
+		strcpy(outputdir, "./");
+#else
 		char *basepath = getenv("HOME");
   #ifdef USE_EOS
    #ifdef STEAMWORKS
@@ -7215,6 +7228,7 @@ int main(int argc, char** argv)
 		{
 			mkdir(outputdir, 0777);
 		}
+#endif // ANDROID
  #else // !NINTENDO
 		strcpy(outputdir, "save:");
  #endif // NINTENDO
@@ -7266,9 +7280,19 @@ int main(int argc, char** argv)
 						strncpy(datadir, argv[c] + 9, datadirsz);
 						datadir[datadirsz] = '\0';
 					}
+					else if (!strncmp(argv[c], "-outputdir=", 11))
+					{
+						size_t outputdirsz = std::min(sizeof(outputdir) - 1, strlen(argv[c] + 11));
+						strncpy(outputdir, argv[c] + 11, outputdirsz);
+						outputdir[outputdirsz] = '\0';
+					}
 					else if ( !strcmp(argv[c], "-nosound") )
 					{
 						no_sound = true;
+					}
+					else if ( !strcmp(argv[c], "-skipintro") )
+					{
+						skipintro = true;
 					}
 					else
 					{
@@ -7281,6 +7305,9 @@ int main(int argc, char** argv)
 		}
 		printlog("Data path is %s", datadir);
 		printlog("Output path is %s", outputdir);
+#ifdef ANDROID
+		SDL_Log("BARONY_ANDROID_PATHS_READY data=%s output=%s", datadir, outputdir);
+#endif
         
         // init sdl
         Uint32 init_flags = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
@@ -7302,6 +7329,11 @@ int main(int argc, char** argv)
 		else {
 			skipintro = false;
 		}
+#ifdef ANDROID
+		// The Android runtime Activity explicitly requests a direct title-screen
+		// launch; do not let a missing first-run settings file undo that choice.
+		skipintro = true;
+#endif
 
 		// initialize map
 		map.tiles = nullptr;
@@ -7348,7 +7380,13 @@ int main(int argc, char** argv)
 									screen);
 #endif
 			deinitApp();
+#ifdef ANDROID
+			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+				"BARONY_ANDROID_STARTUP_FAILED stage=initApp code=%d", c);
+			return c;
+#else
 			exit(c);
+#endif
 		}
 
 		MainMenu::randomizeUsername();
@@ -7369,9 +7407,18 @@ int main(int argc, char** argv)
 			                         screen);
 			deinitGame();
 			deinitApp();
+#ifdef ANDROID
+			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+				"BARONY_ANDROID_STARTUP_FAILED stage=initGame code=%d", c);
+			return c;
+#else
 			exit(c);
+#endif
 		}
 		initialized = true;
+#ifdef ANDROID
+		SDL_Log("BARONY_ANDROID_GAME_INITIALIZED");
+#endif
 
 		// initialize player conducts
 		setDefaultPlayerConducts();
@@ -7445,6 +7492,18 @@ int main(int argc, char** argv)
 			}
 			DebugStats.t21PostHandleMessages = std::chrono::high_resolution_clock::now();
 			bool ranframes = handleEvents();
+#ifdef ANDROID
+			AndroidTouchLayoutMode androidTouchLayout = AndroidTouchLayoutMode::Menu;
+			if ( !intro && !gamePaused && clientnum >= 0 && clientnum < MAXPLAYERS
+				&& players[clientnum] )
+			{
+				androidTouchLayout = players[clientnum]->shootmode
+					&& players[clientnum]->gui_mode == GUI_MODE_NONE
+					? AndroidTouchLayoutMode::Gameplay
+					: AndroidTouchLayoutMode::UI;
+			}
+			androidUpdateTouchLayoutMode(androidTouchLayout);
+#endif
 			DebugStats.t2PostEvents = std::chrono::high_resolution_clock::now();
 #ifdef DEBUG_EVENT_TIMERS
 			real_t accum = 1000 * std::chrono::duration_cast<std::chrono::duration<double>>(DebugStats.t2PostEvents - DebugStats.t21PostHandleMessages).count();
@@ -7661,6 +7720,15 @@ int main(int argc, char** argv)
 						}
 
 						MainMenu::doMainMenu(!intro);
+#ifdef ANDROID
+						static bool androidMainMenuLogged = false;
+						if (!androidMainMenuLogged && MainMenu::main_menu_frame
+							&& !MainMenu::isCutsceneActive())
+						{
+							androidMainMenuLogged = true;
+							SDL_Log("BARONY_ANDROID_MAIN_MENU_READY");
+						}
+#endif
 						UIToastNotificationManager.drawNotifications(MainMenu::isCutsceneActive(), true); // draw this before the cursor
                         framesProcResult = doFrames();
 

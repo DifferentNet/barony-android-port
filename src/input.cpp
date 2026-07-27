@@ -691,8 +691,12 @@ void Input::bind(const char* binding, const char* input) {
 					(*b).second.type = binding_t::CONTROLLER_BUTTON;
 					return;
 				} else if (strcmp((const char*)(type + 6), "Back") == 0) {
+#if defined(__ANDROID__)
+					(*b).second.padButton = SDL_CONTROLLER_BUTTON_BACK;
+#else
 					(*b).second.padButton = getControllerType() == ControllerType::PlayStation ?
                         SDL_CONTROLLER_BUTTON_TOUCHPAD : SDL_CONTROLLER_BUTTON_BACK;
+#endif
 					(*b).second.type = binding_t::CONTROLLER_BUTTON;
 					return;
 				} else if (strcmp((const char*)(type + 6), "Start") == 0) {

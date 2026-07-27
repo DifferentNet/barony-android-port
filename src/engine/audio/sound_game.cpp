@@ -434,6 +434,39 @@ OPENAL_SOUND* playSoundPlayer(int player, Uint16 snd, Uint8 vol)
 	return NULL;
 }
 
+OPENAL_SOUND* playSoundNotification(Uint16 snd, Uint8 vol)
+{
+	OPENAL_SOUND* channel = playSound(snd, vol);
+	if (channel)
+	{
+		OPENAL_Channel_SetChannelGroup(channel, music_notification_group);
+	}
+	return channel;
+}
+
+OPENAL_SOUND* playSoundNotificationPlayer(int player, Uint16 snd, Uint8 vol)
+{
+	if (no_sound || player < 0 || player >= MAXPLAYERS)
+	{
+		return nullptr;
+	}
+	if (players[player]->isLocalPlayer())
+	{
+		return playSoundNotification(snd, vol);
+	}
+	if (multiplayer == SERVER && vol > 0 && player > 0 && !client_disconnected[player])
+	{
+		memcpy(net_packet->data, "SNDN", 4);
+		SDLNet_Write16(snd, &net_packet->data[4]);
+		net_packet->data[6] = vol;
+		net_packet->address.host = net_clients[player - 1].host;
+		net_packet->address.port = net_clients[player - 1].port;
+		net_packet->len = 7;
+		sendPacketSafe(net_sock, -1, net_packet, player - 1);
+	}
+	return nullptr;
+}
+
 /*-------------------------------------------------------------------------------
 
 	playSoundPos
@@ -445,34 +478,11 @@ OPENAL_SOUND* playSoundPlayer(int player, Uint16 snd, Uint8 vol)
 
 OPENAL_SOUND* playSoundPos(real_t x, real_t y, Uint16 snd, Uint8 vol)
 {
-	if (no_sound)
-	{
-		return NULL;
-	}
+	auto result = playSoundPosLocal(x, y, snd, vol);
 
-#ifndef SOUND
-	return NULL;
-#endif
-
-	OPENAL_SOUND* channel;
-	int c;
-
-	if (intro)
+	if (multiplayer == SERVER && vol > 0)
 	{
-		return NULL;
-	}
-	if (snd < 0 || snd >= numsounds)
-	{
-		return NULL;
-	}
-	if (sounds[snd] == NULL || vol == 0)
-	{
-		return NULL;
-	}
-
-	if (multiplayer == SERVER && vol > 0 )
-	{
-		for (c = 1; c < MAXPLAYERS; c++)
+		for (int c = 1; c < MAXPLAYERS; c++)
 		{
 			if ( client_disconnected[c] == true || players[c]->isLocalPlayer() )
 			{
@@ -490,18 +500,7 @@ OPENAL_SOUND* playSoundPos(real_t x, real_t y, Uint16 snd, Uint8 vol)
 		}
 	}
 
-	if (!openal_context)   //For the client.
-	{
-		return NULL;
-	}
-
-	channel = OPENAL_CreateChannel(sounds[snd]);
-	OPENAL_Channel_SetVolume(channel, vol / 255.f);
-	OPENAL_Channel_Set3DAttributes(channel, -y / 16.0, 0, -x / 16.0);
-	OPENAL_Channel_SetChannelGroup(channel, getChannelGroupForSoundIndex(snd));
-	OPENAL_Channel_Play(channel);
-
-	return channel;
+	return result;
 }
 
 OPENAL_SOUND* playSoundPosLocal(real_t x, real_t y, Uint16 snd, Uint8 vol)
@@ -535,10 +534,37 @@ OPENAL_SOUND* playSoundPosLocal(real_t x, real_t y, Uint16 snd, Uint8 vol)
 		return NULL;
 	}
 
+	const float sourceX = -y / 16.0f;
+	const float sourceY = 0.0f;
+	const float sourceZ = -x / 16.0f;
+	OPENAL_CHANNELGROUP* group = getChannelGroupForSoundIndex(snd);
+	#ifdef ANDROID
+	// Ambient entities retry their sound periodically. Virtualize sources beyond
+	// OpenAL's configured 10-unit maximum and let them start as the listener
+	// approaches instead of permanently mixing every torch on the map.
+	if ((group == soundAmbient_group || group == soundEnvironment_group)
+		&& !OPENAL_Listener_IsNear(sourceX, sourceY, sourceZ, 100.0f))
+	{
+		return NULL;
+	}
+	#endif
+	if (group == soundAmbient_group
+		&& OPENAL_ChannelGroup_IsPlayingNear(group, vol / 255.f,
+			sourceX, sourceY, sourceZ, 2.25f))
+	{
+		return NULL;
+	}
+	if (group == soundEnvironment_group
+		&& OPENAL_ChannelGroup_IsPlayingNear(group, vol / 255.f,
+			sourceX, sourceY, sourceZ, 4.5f))
+	{
+		return NULL;
+	}
+
 	channel = OPENAL_CreateChannel(sounds[snd]);
 	OPENAL_Channel_SetVolume(channel, vol / 255.f);
-	OPENAL_Channel_Set3DAttributes(channel, -y / 16.0, 0, -x / 16.0);
-	OPENAL_Channel_SetChannelGroup(channel, getChannelGroupForSoundIndex(snd));
+	OPENAL_Channel_Set3DAttributes(channel, sourceX, sourceY, sourceZ);
+	OPENAL_Channel_SetChannelGroup(channel, group);
 	OPENAL_Channel_Play(channel);
 
 	return channel;
@@ -673,15 +699,8 @@ void playMusic(OPENAL_BUFFER* sound, bool loop, bool crossfade, bool resume)
 	OPENAL_Channel_Play(music_channel);
 }
 
-bool shopmusicplaying = false;
-bool combatmusicplaying = false;
-bool minotaurmusicplaying = false;
-bool herxmusicplaying = false;
-bool devilmusicplaying = false;
-bool olddarkmap = false;
-bool sanctummusicplaying = false;
-
-int currenttrack = -1;
+extern int currenttrack;
+extern bool sanctummusicplaying;
 
 void handleLevelMusic()
 {

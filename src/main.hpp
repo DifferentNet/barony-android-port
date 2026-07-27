@@ -10,7 +10,7 @@
 -------------------------------------------------------------------------------*/
 
 #pragma once
-#include "Config.hpp"
+#include <Config.hpp>
 
 #include <stdlib.h>
 //#ifdef WINDOWS
@@ -110,6 +110,7 @@ extern bool autoLimbReload;
 #else
 #include <unistd.h>
 #include <limits.h>
+#include <sys/stat.h>
 #endif
 #include <string.h>
 #include <ctype.h>
@@ -129,7 +130,12 @@ extern bool autoLimbReload;
 #undef max
 #endif
 
-#ifdef APPLE
+#ifdef ANDROID
+ #define GL_GLEXT_PROTOTYPES
+ #include <GLES3/gl3.h>
+ #include <GLES3/gl3ext.h>
+ #define glDepthRange glDepthRangef
+#elif defined(APPLE)
  //#include <Cocoa/Cocoa.h>
  //#include <OpenGL/OpenGL.h>
  #define GL_GLEXT_PROTOTYPES
@@ -152,7 +158,7 @@ extern bool autoLimbReload;
  #include <GL/glext.h>
 #endif
  #include "SDL_opengl.h"
-#endif // !APPLE
+#endif // !ANDROID && !APPLE
 
 #ifdef APPLE
 #include <SDL2/SDL.h>

@@ -6,7 +6,7 @@
  * This code is free software, available under zlib/libpng license.
  * http://www.libpng.org/pub/png/src/libpng-LICENSE.txt
  */
-#include "Config.hpp"
+#include <Config.hpp>
 #ifndef NINTENDO
 #ifdef APPLE
 #include <SDL2/SDL_video.h>

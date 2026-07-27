@@ -1,5 +1,6 @@
 list(APPEND GAME_SOURCES
 	"${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/android_touch_bridge.cpp"
 	"${CMAKE_CURRENT_SOURCE_DIR}/init.cpp"
 	"${CMAKE_CURRENT_SOURCE_DIR}/collision.cpp"
 	"${CMAKE_CURRENT_SOURCE_DIR}/light.cpp"

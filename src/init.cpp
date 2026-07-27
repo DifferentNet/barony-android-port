@@ -204,7 +204,15 @@ int initApp(char const * const title, int fullscreen)
 
 	// init PHYSFS
 #ifndef NINTENDO
+#ifdef ANDROID
+	PHYSFS_AndroidInit androidPhysFSInit = {
+		SDL_AndroidGetJNIEnv(),
+		SDL_AndroidGetActivity()
+	};
+	PHYSFS_init(reinterpret_cast<const char*>(&androidPhysFSInit));
+#else
 	PHYSFS_init("/");
+#endif
 	PHYSFS_permitSymbolicLinks(1);
 #endif
 
@@ -229,11 +237,17 @@ int initApp(char const * const title, int fullscreen)
 	if ( Language::reloadLanguage() )
 	{
 		printlog("Fatal error: failed to load default language file!\n");
+#ifdef ANDROID
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+			"BARONY_ANDROID_STARTUP_FAILED stage=language code=13");
+		return 13;
+#else
 		if ( logfile )
 		{
 			fclose(logfile);
 		}
 		exit(1);
+#endif
 	}
 
 	// initialize SDL
@@ -461,6 +475,10 @@ int initApp(char const * const title, int fullscreen)
 		GL_CHECK_ERR_RET(glGetString(GL_VENDOR)),
         GL_CHECK_ERR_RET(glGetString(GL_RENDERER)),
         GL_CHECK_ERR_RET(glGetString(GL_VERSION)));
+#ifdef ANDROID
+	SDL_Log("BARONY_ANDROID_GL_ES_READY vendor=%s renderer=%s version=%s",
+		glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION));
+#endif
 #endif
 
 	createCommonDrawResources();
@@ -770,7 +788,7 @@ int initApp(char const * const title, int fullscreen)
 		updateLoadingScreen(60);
 
 #ifndef EDITOR
-		int soundStatus = loadSoundResources(60, 20); // start at 60% loading, progress to 80%
+		int soundStatus = no_sound ? 0 : loadSoundResources(60, 20); // start at 60% loading, progress to 80%
 		if ( 0 != soundStatus )
 		{
 		    loading_done = true;
@@ -1560,9 +1578,15 @@ bool initVideo()
         // * the highest supported compatibility-profile version is 2.1
         // * the highest supported core-profile version is 4.1
         // * the lowest supported core-profile version is 3.2
+#ifdef ANDROID
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
 	    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 	    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 	    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -1611,8 +1635,8 @@ bool initVideo()
 	    flags |= SDL_WINDOW_FULLSCREEN;
 #endif
         
-#ifdef NINTENDO
-    	flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+#if defined(NINTENDO) || defined(ANDROID)
+        flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 #else
         if (fullscreen) {
             flags |= SDL_WINDOW_FULLSCREEN;
@@ -1631,7 +1655,7 @@ bool initVideo()
             return false;
         }
         
-#ifndef NINTENDO
+#if !defined(NINTENDO) && !defined(ANDROID)
         // make sure that we actually got the window size we wanted
         SDL_GL_GetDrawableSize(screen, &xres, &yres);
         SDL_DestroyWindow(screen);
@@ -1698,7 +1722,9 @@ bool initVideo()
         // setup opengl
         GL_CHECK_ERR(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
         GL_CHECK_ERR(glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE));
+#ifndef ANDROID
         GL_CHECK_ERR(glEnable(GL_LINE_SMOOTH));
+#endif
         //GL_CHECK_ERR(glEnable(GL_TEXTURE_2D));
         GL_CHECK_ERR(glEnable(GL_CULL_FACE));
         GL_CHECK_ERR(glCullFace(GL_BACK));

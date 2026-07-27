@@ -6,7 +6,7 @@
  */
 
 #include "main.hpp"
-#include "Config.hpp"
+#include <Config.hpp>
 #ifndef NINTENDO
 #ifdef APPLE
 #include <SDL2/SDL.h>

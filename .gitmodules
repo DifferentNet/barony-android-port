@@ -1,0 +1,27 @@
+[submodule "external/SDL"]
+	path = external/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "external/SDL_image"]
+	path = external/SDL_image
+	url = https://github.com/libsdl-org/SDL_image.git
+[submodule "external/SDL_net"]
+	path = external/SDL_net
+	url = https://github.com/libsdl-org/SDL_net.git
+[submodule "external/SDL_ttf"]
+	path = external/SDL_ttf
+	url = https://github.com/libsdl-org/SDL_ttf.git
+[submodule "external/physfs"]
+	path = external/physfs
+	url = https://github.com/icculus/physfs.git
+[submodule "external/rapidjson"]
+	path = external/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
+[submodule "external/openal-soft"]
+	path = external/openal-soft
+	url = https://github.com/kcat/openal-soft.git
+[submodule "external/ogg"]
+	path = external/ogg
+	url = https://github.com/xiph/ogg.git
+[submodule "external/vorbis"]
+	path = external/vorbis
+	url = https://github.com/xiph/vorbis.git

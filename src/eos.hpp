@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Config.hpp"
+#include <Config.hpp>
 
 #ifdef USE_EOS
 #ifdef NINTENDO

@@ -31,6 +31,7 @@ static real_t getLightAtAdder = 0.0;
 static ConsoleVariable<bool> cvar_fullBright("/fullbright", false);
 #endif
 
+#ifndef ANDROID
 static void perspectiveGL(GLdouble fovY, GLdouble aspect, GLdouble zNear, GLdouble zFar)
 {
 	GLdouble fW, fH;
@@ -40,6 +41,7 @@ static void perspectiveGL(GLdouble fovY, GLdouble aspect, GLdouble zNear, GLdoub
 
     GL_CHECK_ERR(glFrustum(-fW, fW, -fH, fH, zNear, zFar));
 }
+#endif
 
 vec4_t vec4_copy(const vec4_t* v) {
 	return vec4_t(v->x, v->y, v->z, v->w);
@@ -2581,6 +2583,7 @@ const char* gl_error_string(GLenum err) {
     case GL_INVALID_OPERATION:
         assert(0 && "GL_INVALID_OPERATION");
         return "GL_INVALID_OPERATION";
+#ifndef ANDROID
     case GL_STACK_OVERFLOW:
         assert(0 && "GL_STACK_OVERFLOW");
         return "GL_STACK_OVERFLOW";
@@ -2593,6 +2596,7 @@ const char* gl_error_string(GLenum err) {
     case GL_TABLE_TOO_LARGE:
         assert(0 && "GL_TABLE_TOO_LARGE");
         return "GL_TABLE_TOO_LARGE";
+#endif
     case GL_INVALID_FRAMEBUFFER_OPERATION:
         assert(0 && "GL_INVALID_FRAMEBUFFER_OPERATION");
         return "GL_INVALID_FRAMEBUFFER_OPERATION";

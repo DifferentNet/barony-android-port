@@ -35,6 +35,52 @@ const char* fmod_speakermode_strings[FMOD_SPEAKERMODE_MAX] = {
 
 #endif
 
+#if defined USE_OPENAL && defined ANDROID
+static void configureAndroidOpenAL()
+{
+	// SDL's Android audio thread is promoted through the Java bridge. Keep the
+	// queued OpenSL ES output path, but run its mixer on that promoted thread.
+	// SDL 2's AAudio writer accepts partial writes that can underrun on this
+	// device, while its OpenSL queue submits complete buffers.
+	if (SDL_setenv("SDL_AUDIODRIVER", "openslES", 1) != 0)
+	{
+		printlog("[OpenAL]: unable to select Android SDL OpenSL ES output");
+	}
+
+	char configPath[PATH_MAX];
+	snprintf(configPath, sizeof(configPath), "%s/alsoft-android.conf", outputdir);
+	File* configFile = FileIO::open(configPath, "wb");
+	if (!configFile)
+	{
+		printlog("[OpenAL]: unable to create Android buffer configuration at %s", configPath);
+		return;
+	}
+
+	// The Android build expands SDL's OpenSL queue to six entries, retaining
+	// five complete periods of mix-ahead while the audio worker refills one.
+	// Busy maps can keep over one hundred positional sources active at once.
+	// Linear interpolation and unused auxiliary sends substantially reduce the
+	// real-time mix cost without dropping gameplay sounds.
+	configFile->puts(
+		"[general]\n"
+		"drivers = sdl2\n"
+		"period_size = 512\n"
+		"periods = 2\n"
+		"stereo-mode = speakers\n"
+		"stereo-encoding = basic\n"
+		"resampler = linear\n"
+		"slots = 0\n"
+		"sends = 0\n");
+	FileIO::close(configFile);
+	if (SDL_setenv("ALSOFT_CONF", configPath, 1) != 0)
+	{
+		printlog("[OpenAL]: unable to select Android buffer configuration at %s", configPath);
+		return;
+	}
+	printlog("BARONY_ANDROID_AUDIO_BUFFER_CONFIG backend=SDL2 sdl_driver=openslES period=512 queue_buffers=6 resampler=linear sends=0");
+}
+#endif
+
 bool initSoundEngine()
 {
 #ifdef USE_FMOD
@@ -354,7 +400,19 @@ bool initSoundEngine()
 #elif defined USE_OPENAL
 	if (!no_sound)
 	{
-		initOPENAL();
+		#ifdef ANDROID
+		configureAndroidOpenAL();
+		#endif
+		printlog("[OpenAL]: initializing OpenAL Soft...\n");
+		if (!initOPENAL())
+		{
+			printlog("[OpenAL]: initialization failed. DISABLING AUDIO.\n");
+			no_sound = true;
+			return false;
+		}
+		#ifdef ANDROID
+		printlog("BARONY_ANDROID_AUDIO_READY: OpenAL initialized\n");
+		#endif
 	}
 #endif
 
@@ -456,6 +514,17 @@ void freeSoundResources()
 			}
 		}
 		free(sounds); //Then free the sound array.
+	}
+#elif defined USE_OPENAL
+	if (sounds != nullptr)
+	{
+		printlog("freeing OpenAL sounds...\n");
+		for (c = 0; c < numsounds; ++c)
+		{
+			OPENAL_Sound_Release(sounds[c]);
+		}
+		free(sounds);
+		sounds = nullptr;
 	}
 #endif
 }

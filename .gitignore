@@ -46,6 +46,25 @@ steam_appid.txt
 *.res
 *.lnk
 *.xml
+
+# Android SDL2 bootstrap
+!/android/app/src/main/AndroidManifest.xml
+!/android/app/src/main/res/drawable/ic_launcher_foreground.xml
+!/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+!/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+!/android/app/src/main/res/values/colors.xml
+/android/.gradle/
+/android/local.properties
+/android/release-signing.properties
+/android/artifacts/
+/android/.idea/
+/android/**/.cxx/
+/android/**/build/
+/android/test-results/
+/android/device-backups/
+*.iml
+*.apk
+*.aab
 /VS.2015/Beta/Release
 /VS.2015/Debug
 /VS.2015/EOS Debug
@@ -83,3 +102,11 @@ xcode/Barony/Barony.xcodeproj/xcuserdata/*
 *.ilk
 /VS.2015/x64
 *.sqlite-journal
+!/tools/build-smoke.ps1
+!/tools/build-barony.ps1
+!/tools/deploy-menu-data.ps1
+!/tools/test-device.ps1
+!/tools/create-release-keystore.ps1
+!/tools/build-release.ps1
+!/tools/backup-device-state.ps1
+!/tools/restore-device-state.ps1

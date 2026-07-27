@@ -1,7 +1,7 @@
 /*
  * EOS Mocks to make it work with the editor.
  */
-#include "Config.hpp"
+#include <Config.hpp>
 
 #ifdef USE_EOS
 

@@ -619,6 +619,9 @@ void deinitGame()
 #endif
 	if ( !no_sound )
 	{
+#ifdef USE_OPENAL
+		freeOpenALMusic();
+#else
 		music_channel->stop();
 		music_channel2->stop();
 		introductionmusic->release();
@@ -734,6 +737,7 @@ void deinitGame()
 		{
 			free(fortressmusic);
 		}
+#endif
 	}
 #ifdef USE_OPENAL
 #undef FMOD_Channel_Stop

@@ -1,4 +1,10 @@
 
+#if @Android@
+	#ifndef ANDROID
+		#define ANDROID
+	#endif
+#endif
+
 #if @Windows@
 	#define WINDOWS
 #endif

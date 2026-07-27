@@ -26551,6 +26551,20 @@ failed:
 			});
 		copyright->setColor(0xffffffff);
 
+#ifdef ANDROID
+		auto portCredit = main_menu_frame->addField("android_port_credit", 32);
+		portCredit->setFont(smallfont_outline);
+		portCredit->setText("Port by Victor Jdanov");
+		portCredit->setJustify(Field::justify_t::CENTER);
+		portCredit->setSize(SDL_Rect{
+			(Frame::virtualScreenX - 384) / 2,
+			Frame::virtualScreenY - 76,
+			384,
+			24
+			});
+		portCredit->setColor(makeColor(190, 190, 190, 255));
+#endif
+
         auto version_str = getVersionString();
 		auto version = main_menu_frame->addField("version", 32);
 		version->setFont(smallfont_outline);
@@ -27465,6 +27479,20 @@ failed:
 				50
 				});
 			copyright->setColor(0xffffffff);
+
+#ifdef ANDROID
+			auto portCredit = main_menu_frame->addField("android_port_credit", 32);
+			portCredit->setFont(smallfont_outline);
+			portCredit->setText("Port by Victor Jdanov");
+			portCredit->setJustify(Field::justify_t::CENTER);
+			portCredit->setSize(SDL_Rect{
+				(Frame::virtualScreenX - 384) / 2,
+				Frame::virtualScreenY - 76,
+				384,
+				24
+				});
+			portCredit->setColor(makeColor(190, 190, 190, 255));
+#endif
 
 			auto version_str = getVersionString();
 			auto version = main_menu_frame->addField("version", 32);

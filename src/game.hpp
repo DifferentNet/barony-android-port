@@ -21,7 +21,7 @@
 
 #include "interface/consolecommand.hpp"
 
-#include "Config.hpp"
+#include <Config.hpp>
 
 // REMEMBER TO CHANGE THIS WITH EVERY NEW OFFICIAL VERSION!!!
 #ifdef NINTENDO

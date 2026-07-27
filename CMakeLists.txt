@@ -238,6 +238,7 @@ endif()
 
 # OS/Platform Flags
 set(Apple 0)
+set(Android 0)
 set(Windows 0)
 set(Linux 0)
 set(Bsd 0)
@@ -482,6 +483,7 @@ endif()
 #add_subdirectory(books)
  
 configure_file ( "${PROJECT_SOURCE_DIR}/src/Config.hpp.in" "${PROJECT_SOURCE_DIR}/src/Config.hpp")
+include_directories("${PROJECT_SOURCE_DIR}/src")
 
 message("***************************")
 message("Debug flags: ")

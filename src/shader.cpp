@@ -108,6 +108,12 @@ bool Shader::compile(const char* source, size_t len, Shader::Type type) {
         char log[1024];
         GL_CHECK_ERR(glGetShaderInfoLog(shader, (GLint)sizeof(log), nullptr, (GLchar*)log));
         printlog("failed to compile shader: %s", log);
+#ifdef ANDROID
+        const char* typeName = glType == GL_VERTEX_SHADER ? "vertex" : "fragment";
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+            "BARONY_ANDROID_SHADER_COMPILE_FAILED name=%s type=%s log=%s",
+            name, typeName, log);
+#endif
         GL_CHECK_ERR(glDeleteShader(shader));
         return false;
     }
@@ -126,6 +132,10 @@ bool Shader::link() {
         char log[1024];
         GL_CHECK_ERR(glGetProgramInfoLog(program, sizeof(log), nullptr, (GLchar*)log));
         printlog("failed to link shaders for '%s': %s", name, log);
+#ifdef ANDROID
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+            "BARONY_ANDROID_SHADER_LINK_FAILED name=%s log=%s", name, log);
+#endif
         return false;
     }
 }

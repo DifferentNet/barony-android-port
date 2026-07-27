@@ -146,6 +146,14 @@ public:
         _h = height;
     }
 
+    void loadRGBA8(const Uint8* data, int width, int height, bool clamp, bool point) {
+        GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, _texid));
+        GL_CHECK_ERR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)width, (GLsizei)height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data));
+        setParameters(clamp, point);
+        _w = width;
+        _h = height;
+    }
+
     void bind() {
         GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, _texid));
     }

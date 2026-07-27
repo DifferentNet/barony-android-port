@@ -449,7 +449,7 @@ void createCommonDrawResources() {
 		"void main() {"
 		"vec2 LightCoord = WorldPos.xz / (uMapDims.xy * 32.0);"
 		"vec4 Lightmap = texture(uLightmap, LightCoord);"
-		"FragColor = texture(uTextures, TexCoord) * vec4(Color, 1.f) * uLightFactor * Lightmap;"
+		"FragColor = texture(uTextures, TexCoord) * vec4(Color, 1.0) * uLightFactor * Lightmap;"
 
 		"if (uFogDistance > 0.0) {"
 		"float dist = length(uCameraPos.xyz - WorldPos.xyz);"
@@ -493,7 +493,7 @@ void createCommonDrawResources() {
 		"dither(ivec2(gl_FragCoord), uDitherAmount);"
 		"vec2 LightCoord = WorldPos.xz / (uMapDims.xy * 32.0);"
 		"vec4 Lightmap = texture(uLightmap, LightCoord);"
-		"FragColor = texture(uTextures, TexCoord) * vec4(Color, 1.f) * uLightFactor * Lightmap;"
+		"FragColor = texture(uTextures, TexCoord) * vec4(Color, 1.0) * uLightFactor * Lightmap;"
 
 		"if (uFogDistance > 0.0) {"
 		"float dist = length(uCameraPos.xyz - WorldPos.xyz);"
@@ -535,7 +535,7 @@ void createCommonDrawResources() {
 
         "void main() {"
         "mat4 View = uView;"
-        "View[3] = vec4(0.f, 0.f, 0.f, 1.f);"
+        "View[3] = vec4(0.0, 0.0, 0.0, 1.0);"
         "gl_Position = uProj * View * vec4(iPosition, 1.0);"
         "TexCoord = iTexCoord;"
         "Color = iColor;"

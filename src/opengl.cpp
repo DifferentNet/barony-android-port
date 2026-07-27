@@ -698,7 +698,26 @@ static void loadLightmapTexture(int which, map_t& map) {
     
     // load lightmap texture data
     GL_CHECK_ERR(glActiveTexture(GL_TEXTURE1));
+#ifdef ANDROID
+    // RGBA32F textures are not guaranteed to support linear filtering on the
+    // OpenGL ES 3.0 baseline. The lightmap is normalized to [0, 1] from
+    // eight-bit source intensities, so RGBA8 remains filterable on every ES
+    // 3.0 implementation without losing meaningful source precision.
+    static std::vector<Uint8> pixelsRGBA8;
+    pixelsRGBA8.resize(pixels.size());
+    for (size_t i = 0; i < pixels.size(); ++i) {
+        const float value = std::max(0.f, std::min(1.f, pixels[i]));
+        pixelsRGBA8[i] = static_cast<Uint8>(value * 255.f + 0.5f);
+    }
+    lightmapTexture[which]->loadRGBA8(pixelsRGBA8.data(), map.width, map.height, true, false);
+    static bool loggedLightmapFormat = false;
+    if (!loggedLightmapFormat) {
+        SDL_Log("BARONY_ANDROID_LIGHTMAP_FORMAT format=RGBA8 filter=LINEAR");
+        loggedLightmapFormat = true;
+    }
+#else
     lightmapTexture[which]->loadFloat(pixels.data(), map.width, map.height, true, false);
+#endif
     lightmapTexture[which]->bind();
     GL_CHECK_ERR(glActiveTexture(GL_TEXTURE0));
 }

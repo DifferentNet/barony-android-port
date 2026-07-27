@@ -1,3 +1,26 @@
+# Barony Android Port
+
+This branch contains a community-maintained native Android port of Barony by Victor Jdanov. It is published with permission from Turning Wheel LLC and is based on the official Barony v5.0.2 source at commit `962a5ce36d10207beef7d8673876e0cebf8e76e4`.
+
+The Android package contains engine code and open-source dependency notices only. It does not contain Barony maps, models, music, sounds, DLC, or other commercial game data. A purchased Barony v5.0.2 PC installation is required.
+
+See [ANDROID.md](ANDROID.md) for installation, controls, limitations, and build instructions.
+
+## Current Android support
+
+- Native `arm64-v8a` build for Android 8.0 and newer.
+- OpenGL ES 3 rendering.
+- Offline single-player gameplay.
+- Physical gamepads and automatic on-screen touch controls.
+- Music and sound through OpenAL Soft.
+- App-specific game-data storage without broad storage permissions.
+
+Multiplayer services, achievements, workshop integration, and public-store packaging are not currently supported.
+
+---
+
+## Original Barony README
+
 ![Linux-CI_fmod_steam](https://github.com/TurningWheel/Barony/workflows/Linux-CI_fmod_steam/badge.svg) ![Linux-CI_fmod_steam_eos](https://github.com/TurningWheel/Barony/workflows/Linux-CI_fmod_steam_eos/badge.svg)
 
 # Update - 3rd October 2023

@@ -111,3 +111,5 @@ xcode/Barony/Barony.xcodeproj/xcuserdata/*
 !/tools/build-release.ps1
 !/tools/backup-device-state.ps1
 !/tools/restore-device-state.ps1
+!/tools/verify-android-submodules.ps1
+!/tools/verify-android-apk.ps1

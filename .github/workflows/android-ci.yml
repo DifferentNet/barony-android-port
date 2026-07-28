@@ -1,0 +1,157 @@
+name: Android CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Smoke and full ARM64 APKs
+    runs-on: windows-2025
+    timeout-minutes: 60
+
+    env:
+      SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize pinned Android dependencies
+        shell: pwsh
+        run: |
+          git submodule sync
+          git submodule update --init --depth 1 -- `
+            external/SDL `
+            external/SDL_image `
+            external/SDL_net `
+            external/SDL_ttf `
+            external/physfs `
+            external/rapidjson `
+            external/openal-soft `
+            external/ogg `
+            external/vorbis
+
+          git -C external/SDL_image submodule sync
+          git -C external/SDL_image submodule update --init --depth 1 -- `
+            external/libpng `
+            external/zlib
+
+          git -C external/SDL_ttf submodule sync
+          git -C external/SDL_ttf submodule update --init --depth 1 -- `
+            external/freetype
+
+      - name: Verify pinned dependency revisions
+        shell: pwsh
+        run: ./tools/verify-android-submodules.ps1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Install pinned Android toolchain
+        shell: pwsh
+        run: |
+          $sdkManager = (Get-Command sdkmanager.bat -ErrorAction SilentlyContinue).Source
+          if (-not $sdkManager) {
+              $sdkManager = Join-Path $env:ANDROID_SDK_ROOT "cmdline-tools\latest\bin\sdkmanager.bat"
+          }
+          if (-not (Test-Path -LiteralPath $sdkManager)) {
+              throw "sdkmanager.bat was not found."
+          }
+
+          & $sdkManager `
+            "platforms;android-36" `
+            "build-tools;36.0.0" `
+            "ndk;28.1.13356709" `
+            "cmake;3.31.4"
+          if ($LASTEXITCODE -ne 0) {
+              throw "Android toolchain installation failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Verify Gradle wrapper
+        shell: pwsh
+        working-directory: android
+        run: |
+          $expected = "f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6"
+          $configured = (
+              Select-String `
+                -LiteralPath "gradle/wrapper/gradle-wrapper.properties" `
+                -Pattern "^distributionSha256Sum=(.+)$"
+          ).Matches[0].Groups[1].Value
+          if ($configured -ne $expected) {
+              throw "Unexpected Gradle distribution checksum: $configured"
+          }
+
+          ./gradlew.bat --version --no-daemon
+          if ($LASTEXITCODE -ne 0) {
+              throw "Gradle wrapper verification failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Build and verify smoke APK
+        shell: pwsh
+        run: |
+          ./tools/build-smoke.ps1 -Clean
+          if ($LASTEXITCODE -ne 0) {
+              throw "Smoke APK build failed with exit code $LASTEXITCODE."
+          }
+
+          New-Item -ItemType Directory -Path "android/artifacts" -Force | Out-Null
+          Copy-Item `
+            -LiteralPath "android/app/build/outputs/apk/debug/app-debug.apk" `
+            -Destination "android/artifacts/ci-smoke-arm64-v8a.apk" `
+            -Force
+
+          ./tools/verify-android-apk.ps1 `
+            -ApkPath "android/artifacts/ci-smoke-arm64-v8a.apk" `
+            -Variant Smoke `
+            -Abi arm64-v8a
+
+      - name: Build and verify full APK
+        shell: pwsh
+        run: |
+          ./tools/build-barony.ps1 -Clean
+          if ($LASTEXITCODE -ne 0) {
+              throw "Full APK build failed with exit code $LASTEXITCODE."
+          }
+
+          ./tools/verify-android-apk.ps1 `
+            -ApkPath "android/artifacts/app-debug-barony-arm64-v8a.apk" `
+            -Variant Game `
+            -Abi arm64-v8a
+
+      - name: Upload smoke APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-smoke-arm64-v8a
+          path: android/artifacts/ci-smoke-arm64-v8a.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload full APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-full-arm64-v8a
+          path: android/artifacts/app-debug-barony-arm64-v8a.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

@@ -219,6 +219,14 @@ Build an x86-64 emulator APK explicitly:
 
 The default artifact remains ARM64-only.
 
+The `Android CI` workflow runs on pushes and pull requests targeting `main`, and
+can also be started manually. It verifies all pinned Android dependency
+revisions and the Gradle wrapper checksum, then builds clean smoke and full
+ARM64 debug APKs. Both APKs are checked for their package/SDK metadata, exact
+native-library set, permission-free manifest, allowed notice assets, and absence
+of commercial game data. Successful runs retain the unsigned debug APKs as
+temporary workflow artifacts for 14 days; these are not public releases.
+
 Create a validated owned-data archive directly from a source checkout:
 
 ```powershell

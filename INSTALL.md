@@ -1,4 +1,12 @@
-# Dependencies
+# Desktop build instructions
+
+These are the inherited upstream instructions for desktop builds. For the
+native Android port, its pinned toolchain, and source-build commands, use
+[ANDROID.md](ANDROID.md). Android builds do not use the generic desktop CMake
+configuration described below.
+
+## Dependencies
+
 You will need the following libraries to build Barony:
 
  * SDL2 (https://www.libsdl.org/download-2.0.php)
@@ -28,9 +36,9 @@ You will also need the following tools:
  * CMake
  * Linux users will also need Make, or whatever alternate you may generate build files for.
 
-# Windows Instructions
+## Windows Instructions
 
-## Acquire Dependencies
+### Acquire Dependencies
 
 PhysFS:
  * Download from https://icculus.org/physfs/downloads/physfs-3.0.1.tar.bz2
@@ -48,9 +56,9 @@ dirent.h is a POSIX header, you will need to obtain a Windows port. For example,
 
 Download everything else. You may need to build things. More explicit instructions here would be nice.
 
-### TODO: vcpkg something or other
+#### TODO: vcpkg something or other
 
-## Building Barony
+### Building Barony
 
 Visual Studio Instructions:
 * Rather than individually setting up environment variables for every dependency, you can simply create an environment variable named `BARONY_WIN32_LIBRARIES` and point it to a combined dependencies folder. Said folder should have a subdirectory named `include` with all libraries' header files in there, and a `lib` subdirectory for the library archives themselves.
@@ -80,9 +88,9 @@ After that, all you have to do is hit the big green play button, and the game sh
 
 If you'd rather debug the editor, instead of hitting the green play button up top, right click on the "editor" project, mouse over "debug", and then click "start new instance"
 
-# Linux Instructions
+## Linux Instructions
 
-## Acquire Dependencies
+### Acquire Dependencies
 
 For Debian/Ubuntu, you should be able to install most of these dependencies with: //TODO: Add OpenAL to the list.
 sudo apt-get install libsdl2-dev libsdl2-image-dev libsdl2-net-dev libsdl2-ttf-dev libpng-dev libz-dev libphysfs-dev rapidjson-dev
@@ -97,7 +105,7 @@ Linux Install (Navigate to somewhere to drop install files first):
  * make install
 You can then remove the installation files.
 
-## Building Barony
+### Building Barony
 
 You can do something along the following lines:
 ```
@@ -107,7 +115,7 @@ cmake ..
 make -j
 ```
 
-# Build Flags
+## Build Flags
 
 TODO: Document all of them...
 

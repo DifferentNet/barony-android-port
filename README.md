@@ -2,18 +2,21 @@
 
 [![Android CI](https://github.com/DifferentNet/barony-android-port/actions/workflows/android-ci.yml/badge.svg)](https://github.com/DifferentNet/barony-android-port/actions/workflows/android-ci.yml)
 
-This branch contains a community-maintained native Android port of Barony by Victor Jdanov. It is published with permission from Turning Wheel LLC and is based on the official Barony v5.0.2 source at commit `962a5ce36d10207beef7d8673876e0cebf8e76e4`.
+This repository contains a community-maintained native Android port of Barony by Victor Jdanov. It is published with permission from Turning Wheel LLC and is based on the official Barony v5.0.2 source at commit `962a5ce36d10207beef7d8673876e0cebf8e76e4`.
 
 The Android package contains engine code and open-source dependency notices only. It does not contain Barony maps, models, music, sounds, DLC, or other commercial game data. A purchased Barony v5.0.2 PC installation is required.
 
-Install the APK, then copy the required files from your purchased Barony v5.0.2
-installation into the app's `barony-data` folder. The app validates those files and
-creates its Android data manifest automatically. See [ANDROID.md](ANDROID.md) for
-the exact folder layout, installation alternatives, controls, limitations, and
-source-build instructions.
+Download the APK and owned-data archive builder from the
+[GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
+Run the builder on a Windows PC with an owned Steam or GOG Barony v5.0.2
+installation, copy the generated ZIP to the Android device, then select
+**Import archive** when the port starts. The ZIP remains the user's private
+commercial data and must not be shared.
 
-Signed APKs, checksums, release notes, and the Windows data installer are available
-from the [GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
+See [ANDROID.md](ANDROID.md) for checksum verification, installation
+alternatives, controls, save backups, limitations, and source-build
+instructions. Releases also include checksums and an ADB data installer for
+advanced fallback use.
 
 ## Current Android support
 

@@ -219,13 +219,25 @@ Build an x86-64 emulator APK explicitly:
 
 The default artifact remains ARM64-only.
 
+Verify the pinned dependency checkout and either generated APK locally:
+
+```powershell
+.\tools\verify-android-submodules.ps1
+.\tools\verify-android-apk.ps1 `
+    -ApkPath .\android\artifacts\app-debug-barony-arm64-v8a.apk `
+    -Variant Game `
+    -Abi arm64-v8a
+```
+
+Use `-Variant Smoke` with the smoke APK immediately after a smoke build.
+
 The `Android CI` workflow runs on pushes and pull requests targeting `main`, and
 can also be started manually. It verifies all pinned Android dependency
 revisions and the Gradle wrapper checksum, then builds clean smoke and full
 ARM64 debug APKs. Both APKs are checked for their package/SDK metadata, exact
 native-library set, permission-free manifest, allowed notice assets, and absence
-of commercial game data. Successful runs retain the unsigned debug APKs as
-temporary workflow artifacts for 14 days; these are not public releases.
+of commercial game data. Successful runs retain debug-signed, non-release APKs
+as temporary workflow artifacts for 14 days; these are not public releases.
 
 Create a validated owned-data archive directly from a source checkout:
 

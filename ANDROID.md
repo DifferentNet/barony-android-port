@@ -13,7 +13,10 @@ The APK is code-only. It does not contain the commercial Barony game data, so ev
 - Offline single-player.
 - Physical gamepad, mouse and keyboard, or on-screen touch controls.
 
-The port has been tested on a Samsung Galaxy S24 Ultra with an Adreno 750 GPU and a GameSir G8 controller.
+The port has been tested on a Samsung Galaxy S24 Ultra / Adreno 750 with a
+GameSir G8 controller. Affected-device testers also confirmed the mobile
+framebuffer compatibility path on a Galaxy Note 9 / Mali-G72 and a
+Poco F7 / Adreno 825.
 
 ## Install a release
 
@@ -30,7 +33,7 @@ release notes describe your device or problem.
 Verify the APK before installing it:
 
 ```powershell
-$apk = '.\Barony-Android-Port-5.0.2-android-beta2-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta4-arm64-v8a.apk'
 (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
 Get-Content "$apk.sha256"
 ```
@@ -42,36 +45,55 @@ Download the APK on the Android device and open it. Android may ask you to allow
 your browser or file manager to install unknown apps. This permission can be
 disabled again after installation.
 
-Launch **Barony Android Port** once. The initial data message creates the target
-folder:
+### Recommended: import an owned-data archive
+
+Download `Barony-Android-Data-Archive-Builder-5.0.2.ps1` from the same release
+on a Windows PC containing an owned Barony v5.0.2 installation. Run:
+
+```powershell
+Unblock-File .\Barony-Android-Data-Archive-Builder-5.0.2.ps1
+.\Barony-Android-Data-Archive-Builder-5.0.2.ps1
+```
+
+The builder detects default Steam and GOG installation locations, validates
+the exact supported v5.0.2 data, excludes executables, SDKs, videos, caches, and
+other unused files, and creates:
+
+```text
+Barony-Android-Data-5.0.2.zip
+Barony-Android-Data-5.0.2.zip.sha256
+```
+
+Use `-SourcePath <path>` if Barony is installed somewhere else and
+`-OutputPath <file.zip>` to select another destination.
+
+Copy the ZIP to the Android device without extracting it. Start
+**Barony Android Port**, select **Import archive**, and choose the ZIP with
+Android's document picker. The app:
+
+1. extracts into a separate staging directory;
+2. rejects unsafe, unexpected, oversized, incomplete, or incompatible content;
+3. verifies the pinned v5.0.2 critical-file hashes;
+4. replaces existing game data only after validation succeeds.
+
+Importing requires no broad storage permission and never places commercial data
+inside the APK or repository.
+
+After initial setup, **Data & Saves** on Barony's main menu can import a
+replacement owned-data archive. Because Barony mounts data for the lifetime of
+its native process, choose **Exit now** after validation and open the port again
+to apply it.
+
+### Manual folder layout
+
+Advanced users may still copy the PC installation's required contents directly
+into:
 
 `Android/data/com.zhdan.baronyport/files/barony-data`
 
-Copy the **contents** of the PC Barony installation into `barony-data`. Do not
-create another `Barony` directory inside it. The resulting layout must include:
-
-```text
-barony-data/
-  books/
-  data/
-  fonts/
-  images/
-  items/
-  lang/
-  maps/
-  models/
-  music/
-  sound/
-  gamecontrollerdb.txt
-  npcnames-female.txt
-  npcnames-male.txt
-  playernames-female.txt
-  playernames-male.txt
-```
-
-Copying the complete contents is acceptable for private use, although Windows
-executables, SDKs, `_barony-source`, videos, holiday themes, and `models.cache`
-are not used by the Android port and can be omitted.
+The maps, models, music, and other required folders must be directly inside
+`barony-data`, not inside another `Barony` directory. When no deployment
+manifest exists, the app checks the pinned critical hashes and creates one.
 
 Score history is writable user state rather than required game data. Current
 Barony versions store it as `savegames/scores.json` and
@@ -79,19 +101,14 @@ Barony versions store it as `savegames/scores.json` and
 Do not rename those JSON files or copy legacy `scores.dat` files into
 `barony-data`.
 
-Return to the game and select **Retry**. When no deployment manifest is present,
-the app checks pinned hashes for the supported v5.0.2 data and creates the
-manifest itself. Modified or incompatible critical files are rejected with a
-clear error.
-
-### If `Android/data` is inaccessible
+### ADB data installer fallback
 
 Android 11 and newer restrict access to `Android/data`. Some desktop USB file
 browsers and device file managers can still copy to the app-specific folder,
 while others hide or reject it. The Android port deliberately does not request
 broad storage permissions to bypass this protection.
 
-The reliable fallback is the data-installer script included with the release.
+The legacy data-installer script included with the release remains available.
 It requires Windows, Android SDK Platform Tools, and USB debugging or Wireless
 debugging. With the APK already installed, run:
 
@@ -109,7 +126,7 @@ You can also install or update the APK through ADB:
 
 ```powershell
 $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
-$apk = '.\Barony-Android-Port-5.0.2-android-beta2-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta4-arm64-v8a.apk'
 & $adb devices
 & $adb install -r $apk
 ```
@@ -121,7 +138,19 @@ if anything is missing or incompatible.
 
 ## Updating and saves
 
-Install updates with `adb install -r`; do not uninstall the app first. Android removes app-specific files when an app is uninstalled, including internal saves.
+Install updates over the existing app; do not uninstall first. Android removes
+app-specific files when an app is uninstalled, including internal saves.
+
+From the root Barony main menu, select **Data & Saves**:
+
+- **Export saves and settings** creates a portable ZIP through Android's
+  document picker. It contains only `savegames/` and `config/`, plus a manifest
+  with a SHA-256 hash for every file.
+- **Import saves and settings** validates that archive and stages it for the
+  next clean process launch. Select **Exit now**, then open the port again.
+
+Save imports reject traversal paths, unexpected files, manifest mismatches,
+modified payloads, more than 512 files, and payloads larger than 64 MiB.
 
 Barony uses one-shot checkpoints. Loading an adventure consumes its current checkpoint, and the replacement checkpoint is written at a later dungeon-level boundary. Do not test save persistence by loading a valuable adventure and immediately quitting to the main menu.
 
@@ -142,25 +171,13 @@ Mouse and keyboard input are also supported through Android.
 - Offline single-player is the tested mode.
 - Steamworks, EOS, PlayFab, achievements, workshop integration, and voice chat are disabled.
 - Controller glyph selection has not been verified across a broad range of controller models.
-- A Galaxy Note 9 with a Mali-G72 GPU has reported an almost-black 3D world.
-  The focused
-  [Mali lighting test build](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-mali-test1)
-  changes Android lightmaps to a GLES 3.0-safe normalized RGBA8 format; confirmation
-  on the affected device is pending.
-- A Poco F7 with an Adreno 825 GPU has reported flickering world tiles, black or
-  purple render blocks, and poor HDR performance. The focused
-  [HDR compatibility test build](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-hdr-compat-test1)
-  removes Android's full-resolution HDR readback and adds framebuffer diagnostics;
-  confirmation on the affected device is pending.
 - HDR tone mapping uses fixed exposure on Android. Adaptive eye adjustment is
   disabled because the desktop implementation reads a full-resolution
   half-float framebuffer back to the CPU every frame, which is unsuitable for
   tile-based mobile GPUs.
-- Direct game-data copying depends on whether the phone exposes its app-specific
-  `Android/data` folder. The reliable fallback requires Windows, PowerShell, and
-  ADB.
+- Creating a validated owned-data archive currently requires Windows and
+  PowerShell. Importing it on Android does not require ADB.
 - Touch layout customization, haptics, and left-handed presets are not implemented.
-- In-app archive or folder import is not implemented.
 
 ## Build from source
 
@@ -202,6 +219,16 @@ Build an x86-64 emulator APK explicitly:
 
 The default artifact remains ARM64-only.
 
+Create a validated owned-data archive directly from a source checkout:
+
+```powershell
+.\tools\create-data-archive.ps1
+```
+
+Pass `-SourcePath` for a non-default Steam/GOG installation and `-OutputPath`
+to choose the ZIP destination. Generated owned-data archives are private user
+artifacts and must never be committed or attached to a public release.
+
 ## Signed release builds
 
 Create a local signing identity once:
@@ -215,7 +242,7 @@ Back up the generated keystore and password securely. Losing the signing key pre
 Build and verify a signed release:
 
 ```powershell
-.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-hdr-compat-test1 -VersionCode 5000210
+.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-next -VersionCode 5000217
 ```
 
 Use a unique version name and a version code greater than every previously
@@ -229,7 +256,8 @@ The release script verifies:
 - all required open-source notices;
 - the absence of commercial game-data paths and unexpected APK assets.
 
-It writes the APK, SHA-256 checksum, build metadata, and standalone data installer under ignored `android\artifacts\`.
+It writes the APK, SHA-256 checksum, build metadata, standalone ADB data
+installer, and owned-data archive builder under ignored `android\artifacts\`.
 
 ## License and ownership
 

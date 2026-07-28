@@ -202,6 +202,17 @@ Set-Content `
     -Value "$DataInstallerHash  $([IO.Path]::GetFileName($DataInstallerPath))" `
     -Encoding ASCII
 
+$ArchiveBuilderSource = Join-Path $PSScriptRoot 'create-data-archive.ps1'
+$ArchiveBuilderPath = Join-Path $AndroidRoot 'artifacts\Barony-Android-Data-Archive-Builder-5.0.2.ps1'
+Copy-Item -LiteralPath $ArchiveBuilderSource -Destination $ArchiveBuilderPath -Force
+$ArchiveBuilderHash = (
+    Get-FileHash -LiteralPath $ArchiveBuilderPath -Algorithm SHA256
+).Hash.ToLowerInvariant()
+Set-Content `
+    -LiteralPath "$ArchiveBuilderPath.sha256" `
+    -Value "$ArchiveBuilderHash  $([IO.Path]::GetFileName($ArchiveBuilderPath))" `
+    -Encoding ASCII
+
 $PortCommit = (git -C $RepositoryRoot rev-parse HEAD).Trim()
 $Dirty = if (git -C $RepositoryRoot status --porcelain) { 'true' } else { 'false' }
 $BuildInfoPath = "$ReleaseApk.build.txt"
@@ -222,4 +233,5 @@ Write-Host "Release APK: $($Apk.FullName) ($($Apk.Length) bytes)"
 Write-Host "SHA-256: $Hash"
 Write-Host "Build metadata: $BuildInfoPath"
 Write-Host "Data installer: $DataInstallerPath"
+Write-Host "Data archive builder: $ArchiveBuilderPath"
 Write-Host 'Verified: package/version/SDK metadata, non-debuggable and zero-permission manifest, release signature, exact ARM64 native-library set, notice-only assets, and no commercial data paths.'

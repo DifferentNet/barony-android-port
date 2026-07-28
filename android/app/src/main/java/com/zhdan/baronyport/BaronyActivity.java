@@ -1,6 +1,7 @@
 package com.zhdan.baronyport;
 
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -73,8 +74,10 @@ public final class BaronyActivity extends SDLActivity {
     private File outputDirectory;
     private File externalFilesDirectory;
     private File stateImportDirectory;
+    private File dataImportDirectory;
     private View blockedSdlSurface;
     private AlertDialog dataDialog;
+    private AndroidStorageManager storageManager;
     private boolean startupBlocked;
 
     @Override
@@ -85,6 +88,15 @@ public final class BaronyActivity extends SDLActivity {
         }
 
         prepareStorageDirectories();
+        storageManager = new AndroidStorageManager(this);
+        DataValidation pendingDataImport = storageManager.applyPendingDataImportAtStartup();
+        if (!pendingDataImport.valid) {
+            blockNativeStartup();
+            if (mLayout != null) {
+                mLayout.post(() -> showDataDialog(pendingDataImport));
+            }
+            return;
+        }
         StateImportResult importResult = importStagedUserState();
         if (!importResult.success) {
             blockNativeStartup();
@@ -143,6 +155,8 @@ public final class BaronyActivity extends SDLActivity {
             if (externalFilesDirectory != null) {
                 stateImportDirectory = new File(
                         externalFilesDirectory, STATE_IMPORT_DIRECTORY);
+                dataImportDirectory = new File(
+                        externalFilesDirectory, AndroidStorageManager.DATA_IMPORT_DIRECTORY);
             }
         }
         if (outputDirectory == null) {
@@ -368,29 +382,34 @@ public final class BaronyActivity extends SDLActivity {
     }
 
     private DataValidation validateGameData() {
+        return validateGameData(dataDirectory, "manual-copy");
+    }
+
+    DataValidation validateGameData(File rootDirectory, String deploymentMethod) {
         for (String relativePath : REQUIRED_DATA_DIRECTORIES) {
-            File directory = new File(dataDirectory, relativePath);
+            File directory = new File(rootDirectory, relativePath);
             if (!directory.isDirectory()) {
                 return DataValidation.failure("missing_data",
                         "Required directory is missing: " + relativePath);
             }
         }
         for (String relativePath : REQUIRED_DATA_FILES) {
-            File file = new File(dataDirectory, relativePath);
+            File file = new File(rootDirectory, relativePath);
             if (!file.isFile() || file.length() <= 0L) {
                 return DataValidation.failure("missing_data",
                         "Required file is missing or empty: " + relativePath);
             }
         }
 
-        File manifestFile = new File(dataDirectory, DATA_MANIFEST_NAME);
+        File manifestFile = new File(rootDirectory, DATA_MANIFEST_NAME);
         if (!manifestFile.isFile()) {
-            DataValidation copiedDataValidation = validatePinnedCriticalFiles();
+            DataValidation copiedDataValidation =
+                    validatePinnedCriticalFiles(rootDirectory);
             if (!copiedDataValidation.valid) {
                 return copiedDataValidation;
             }
             try {
-                writeGeneratedDataManifest(manifestFile);
+                writeGeneratedDataManifest(manifestFile, deploymentMethod);
                 Log.i(TAG, "BARONY_ANDROID_DATA_MANIFEST_CREATED path="
                         + manifestFile.getAbsolutePath());
                 return DataValidation.success();
@@ -440,7 +459,7 @@ public final class BaronyActivity extends SDLActivity {
                             "The deployment manifest does not describe the supported Barony "
                                     + EXPECTED_GAME_VERSION + " file: " + relativePath);
                 }
-                String actualHash = sha256(new File(dataDirectory, relativePath));
+                String actualHash = sha256(new File(rootDirectory, relativePath));
                 if (!pinnedHash.equalsIgnoreCase(actualHash)) {
                     return DataValidation.failure("integrity_mismatch",
                             "The copied file does not match Barony " + EXPECTED_GAME_VERSION
@@ -455,11 +474,11 @@ public final class BaronyActivity extends SDLActivity {
         }
     }
 
-    private DataValidation validatePinnedCriticalFiles() {
+    private DataValidation validatePinnedCriticalFiles(File rootDirectory) {
         try {
             for (int index = 0; index < CRITICAL_HASH_FILES.length; ++index) {
                 String relativePath = CRITICAL_HASH_FILES[index];
-                String actualHash = sha256(new File(dataDirectory, relativePath));
+                String actualHash = sha256(new File(rootDirectory, relativePath));
                 if (!EXPECTED_CRITICAL_HASHES[index].equalsIgnoreCase(actualHash)) {
                     return DataValidation.failure("version_mismatch",
                             "The copied file does not match Barony " + EXPECTED_GAME_VERSION
@@ -475,7 +494,8 @@ public final class BaronyActivity extends SDLActivity {
         }
     }
 
-    private void writeGeneratedDataManifest(File manifestFile)
+    private void writeGeneratedDataManifest(
+            File manifestFile, String deploymentMethod)
             throws IOException, JSONException {
         JSONObject criticalFiles = new JSONObject();
         for (int index = 0; index < CRITICAL_HASH_FILES.length; ++index) {
@@ -487,7 +507,7 @@ public final class BaronyActivity extends SDLActivity {
         manifest.put("gameVersion", EXPECTED_GAME_VERSION);
         manifest.put("sourceCommit", EXPECTED_SOURCE_COMMIT);
         manifest.put("deployedAtUtc", java.time.Instant.now().toString());
-        manifest.put("deploymentMethod", "manual-copy");
+        manifest.put("deploymentMethod", deploymentMethod);
         manifest.put("criticalFiles", criticalFiles);
 
         File temporaryManifest = new File(
@@ -522,12 +542,11 @@ public final class BaronyActivity extends SDLActivity {
         String message = "Requires data from an owned Barony "
                 + EXPECTED_GAME_VERSION + " PC installation.\n\n"
                 + validation.detail + "\n\n"
-                + "Copy the contents of the PC Barony folder into:\n"
-                + "Android/data/com.zhdan.baronyport/files/barony-data\n\n"
-                + "The maps, models, music, and other folders must be directly inside "
-                + "barony-data. After copying, select Retry.\n\n"
-                + "If Android blocks this folder, use a PC with USB/ADB and "
-                + "tools\\deploy-menu-data.ps1.";
+                + "Recommended: create an owned-data archive on Windows with "
+                + "Barony-Android-Data-Archive-Builder-5.0.2.ps1, copy the ZIP "
+                + "to this device, then select Import archive below.\n\n"
+                + "The APK contains no commercial game data. The archive must come "
+                + "from your own compatible Barony installation.";
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(validation.reason.equals("version_mismatch")
@@ -536,6 +555,11 @@ public final class BaronyActivity extends SDLActivity {
                 .setMessage(message)
                 .setCancelable(false)
                 .setPositiveButton("Retry", (dialog, which) -> retryDataValidation())
+                .setNeutralButton("Import archive", (dialog, which) -> {
+                    if (storageManager != null) {
+                        storageManager.pickOwnedDataArchive();
+                    }
+                })
                 .setNegativeButton("Exit", (dialog, which) -> finish());
         dataDialog = builder.create();
         dataDialog.setOnDismissListener(dialog -> dataDialog = null);
@@ -597,6 +621,57 @@ public final class BaronyActivity extends SDLActivity {
         Log.i(TAG, "BARONY_ANDROID_STATE_IMPORT_RETRY_ACCEPTED");
     }
 
+    File getBaronyDataDirectory() {
+        return dataDirectory;
+    }
+
+    File getBaronyOutputDirectory() {
+        return outputDirectory;
+    }
+
+    File getBaronyStateImportDirectory() {
+        return stateImportDirectory;
+    }
+
+    File getBaronyDataImportDirectory() {
+        return dataImportDirectory;
+    }
+
+    boolean isNativeStartupBlocked() {
+        return startupBlocked;
+    }
+
+    StateImportResult consumeStagedStateImport() {
+        return importStagedUserState();
+    }
+
+    void onDocumentDataImportApplied() {
+        runOnUiThread(this::retryDataValidation);
+    }
+
+    void onDocumentStateImportApplied(StateImportResult result) {
+        runOnUiThread(() -> {
+            if (!result.success) {
+                showStateImportDialog(result);
+                return;
+            }
+            DataValidation validation = validateGameData();
+            if (validation.valid) {
+                resumeNativeStartup();
+            } else {
+                showDataDialog(validation);
+            }
+        });
+    }
+
+    void showCurrentDataRequirement() {
+        runOnUiThread(() -> showDataDialog(validateGameData()));
+    }
+
+    void requestStorageRestart() {
+        runOnUiThread(SDLActivity::nativeSendQuit);
+    }
+
     private static String sha256(File file)
             throws IOException, NoSuchAlgorithmException {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -627,6 +702,24 @@ public final class BaronyActivity extends SDLActivity {
                 touchControls.setLayoutMode(mode);
             }
         });
+    }
+
+    /** Called from the Android-only Barony main-menu option. */
+    public void showStorageManager() {
+        runOnUiThread(() -> {
+            if (storageManager != null) {
+                storageManager.show();
+            }
+        });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (storageManager != null
+                && storageManager.handleActivityResult(requestCode, resultCode, data)) {
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @SuppressWarnings("deprecation")
@@ -672,6 +765,10 @@ public final class BaronyActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (storageManager != null) {
+            storageManager.shutdown();
+            storageManager = null;
+        }
         if (dataDialog != null) {
             dataDialog.dismiss();
             dataDialog = null;
@@ -689,7 +786,7 @@ public final class BaronyActivity extends SDLActivity {
         }
     }
 
-    private static final class DataValidation {
+    static final class DataValidation {
         final boolean valid;
         final String reason;
         final String detail;
@@ -721,7 +818,7 @@ public final class BaronyActivity extends SDLActivity {
         }
     }
 
-    private static final class StateImportResult {
+    static final class StateImportResult {
         final boolean success;
         final int importedFiles;
         final String detail;

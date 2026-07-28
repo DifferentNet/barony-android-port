@@ -21,6 +21,8 @@ from the [GitHub releases page](https://github.com/DifferentNet/barony-android-p
 - Physical gamepads and automatic on-screen touch controls.
 - Music and sound through OpenAL Soft.
 - App-specific game-data storage without broad storage permissions.
+- In-app import of validated owned-data ZIP archives.
+- Portable save/settings export and import from the main menu.
 
 Multiplayer services, achievements, workshop integration, and public-store packaging are not currently supported.
 

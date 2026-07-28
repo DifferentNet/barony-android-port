@@ -26,6 +26,7 @@
 #include "../colors.hpp"
 #include "../book.hpp"
 #include "../scrolls.hpp"
+#include "../android_data_bridge.hpp"
 
 #include <cassert>
 #include <functional>
@@ -938,6 +939,9 @@ namespace MainMenu {
 	static void mainReturnToHallofTrials(Button&);
 	static void mainQuitToMainMenu(Button&);
 	static void mainQuitToDesktop(Button&);
+#ifdef ANDROID
+	static void mainAndroidStorage(Button&);
+#endif
 
 	static void characterCardGameFlagsMenu(int index);
 	static void characterCardLobbySettingsMenu(int index);
@@ -25848,6 +25852,14 @@ failed:
 			});
 	}
 
+#ifdef ANDROID
+	static void mainAndroidStorage(Button&)
+	{
+		soundActivate();
+		androidOpenStorageManager();
+	}
+#endif
+
 	static void mainQuitToDesktop(Button& button) {
 		const char* quit_messages[][3] {
 			{Language::get(5700), Language::get(5701), Language::get(5702)},
@@ -27042,6 +27054,18 @@ failed:
 				});
 			}
 		}
+
+#ifdef ANDROID
+		if ( !ingame )
+		{
+			auto quitOption = std::find_if(options.begin(), options.end(),
+				[](const Option& option) {
+					return !strcmp(option.name, "Quit");
+				});
+			options.insert(quitOption,
+				{"Data & Saves", "Data & Saves", mainAndroidStorage});
+		}
+#endif
 
 		const int num_options = (int)options.size();
 

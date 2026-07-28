@@ -105,6 +105,7 @@ xcode/Barony/Barony.xcodeproj/xcuserdata/*
 !/tools/build-smoke.ps1
 !/tools/build-barony.ps1
 !/tools/deploy-menu-data.ps1
+!/tools/create-data-archive.ps1
 !/tools/test-device.ps1
 !/tools/create-release-keystore.ps1
 !/tools/build-release.ps1

@@ -79,6 +79,29 @@ Android's document picker. The app:
 Importing requires no broad storage permission and never places commercial data
 inside the APK or repository.
 
+### Owned DLC entitlements
+
+The archive builder carries DLC access over from the selected owned PC
+installation:
+
+- GOG and other DRM-free installations may provide
+  `mythsandoutcasts.key`, `legendsandpariahs.key`, and
+  `desertersanddisciples.key`. The builder includes only keys that are present,
+  and Barony's existing license-key validation runs on Android.
+- Steam installations do not provide those key files. The builder checks the
+  local Steam account configuration for cached app tickets `1010820`,
+  `1010821`, and `1010822`, then writes only the corresponding pack names to
+  the private owned-data archive.
+
+No Steam account ID, password, ticket contents, `localconfig.vdf`, or other
+Steam configuration is copied. If an owned Steam DLC is not detected, launch
+Barony on that PC once so Steam refreshes its cached tickets, then rebuild the
+archive.
+
+The entitlement files are part of the user's private owned-data archive. They
+must not be uploaded, attached to an issue, or shared with another user. DLC
+remains locked when the builder finds no matching local entitlement.
+
 After initial setup, **Data & Saves** on Barony's main menu can import a
 replacement owned-data archive. Because Barony mounts data for the lifetime of
 its native process, choose **Exit now** after validation and open the port again
@@ -171,6 +194,9 @@ Mouse and keyboard input are also supported through Android.
 - Offline single-player is the tested mode.
 - Steamworks, EOS, PlayFab, achievements, workshop integration, and voice chat are disabled.
 - Controller glyph selection has not been verified across a broad range of controller models.
+- Steam DLC entitlement transfer depends on a locally cached Steam app ticket;
+  launch the PC version once before rebuilding the data archive if an owned pack
+  is not detected.
 - HDR tone mapping uses fixed exposure on Android. Adaptive eye adjustment is
   disabled because the desktop implementation reads a full-resolution
   half-float framebuffer back to the CPU every frame, which is unsuitable for

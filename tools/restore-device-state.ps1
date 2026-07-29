@@ -69,7 +69,7 @@ function Get-ConnectedDevices {
         throw "Unable to list ADB devices: $($Lines -join [Environment]::NewLine)"
     }
     return @($Lines | ForEach-Object {
-        if ($_ -match '^([^\s]+)\s+device(?:\s|$)') { $Matches[1] }
+        if ($_ -match '^(.+?)\s+device(?:\s|$)') { $Matches[1].Trim() }
     })
 }
 

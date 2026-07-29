@@ -27,6 +27,8 @@ advanced fallback use.
 - Music and sound through OpenAL Soft.
 - App-specific game-data storage without broad storage permissions.
 - In-app import of validated owned-data ZIP archives.
+- Owned DLC entitlement transfer from Steam cached app tickets or GOG/DRM-free
+  license keys.
 - Portable save/settings export and import from the main menu.
 
 Multiplayer services, achievements, workshop integration, and public-store packaging are not currently supported.

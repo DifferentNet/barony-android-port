@@ -11,6 +11,28 @@ Set-StrictMode -Version 3.0
 $ExpectedGameVersion = '5.0.2'
 $ExpectedSourceCommit = '962a5ce36d10207beef7d8673876e0cebf8e76e4'
 $ManifestName = '.barony-android-data.json'
+$DlcUnlockName = 'dlc.unlock'
+$DlcKeyMaximumBytes = 4096
+$DlcDefinitions = @(
+    [pscustomobject]@{
+        Pack = 'mythsandoutcasts'
+        Name = 'Myths and Outcasts'
+        AppId = '1010820'
+        KeyFile = 'mythsandoutcasts.key'
+    },
+    [pscustomobject]@{
+        Pack = 'legendsandpariahs'
+        Name = 'Legends and Pariahs'
+        AppId = '1010821'
+        KeyFile = 'legendsandpariahs.key'
+    },
+    [pscustomobject]@{
+        Pack = 'desertersanddisciples'
+        Name = 'Deserters and Disciples'
+        AppId = '1010822'
+        KeyFile = 'desertersanddisciples.key'
+    }
+)
 $RequiredDirectories = @(
     'books', 'data', 'fonts', 'images', 'items',
     'lang', 'maps', 'models', 'music', 'sound'
@@ -55,6 +77,86 @@ function Test-LooksLikeBaronyInstall {
         -and (Test-Path -LiteralPath (Join-Path $Path 'models\models.txt') -PathType Leaf)
 }
 
+function Get-SteamRootCandidates {
+    param([Parameter(Mandatory)][string]$InstallPath)
+
+    $Candidates = [System.Collections.Generic.List[string]]::new()
+    if ($InstallPath -match '(?i)[\\/]steamapps[\\/]common[\\/]') {
+        $Candidates.Add([IO.Path]::GetFullPath(
+            (Join-Path $InstallPath '..\..\..')))
+    }
+    foreach ($RegistryPath in @(
+            'HKCU:\Software\Valve\Steam',
+            'HKLM:\Software\WOW6432Node\Valve\Steam',
+            'HKLM:\Software\Valve\Steam')) {
+        try {
+            $Properties = Get-ItemProperty -LiteralPath $RegistryPath -ErrorAction Stop
+            foreach ($PropertyName in @('SteamPath', 'InstallPath')) {
+                $Property = $Properties.PSObject.Properties[$PropertyName]
+                $Value = if ($Property) { $Property.Value } else { $null }
+                if ($Value) {
+                    $Candidates.Add([IO.Path]::GetFullPath($Value))
+                }
+            }
+        }
+        catch {
+        }
+    }
+    $Candidates.Add('C:\Program Files (x86)\Steam')
+    $Candidates.Add('C:\Program Files\Steam')
+
+    return @(
+        $Candidates |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Container } |
+            Select-Object -Unique
+    )
+}
+
+function Test-SteamCachedAppTicket {
+    param(
+        [Parameter(Mandatory)][string[]]$SteamRoots,
+        [Parameter(Mandatory)][string]$AppId
+    )
+
+    foreach ($SteamRoot in $SteamRoots) {
+        $UserData = Join-Path $SteamRoot 'userdata'
+        if (-not (Test-Path -LiteralPath $UserData -PathType Container)) {
+            continue
+        }
+        $Configs = @(
+            Get-ChildItem -LiteralPath $UserData -Directory -ErrorAction SilentlyContinue |
+                ForEach-Object { Join-Path $_.FullName 'config\localconfig.vdf' } |
+                Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+        )
+        foreach ($Config in $Configs) {
+            $InTickets = $false
+            $BlockOpened = $false
+            foreach ($Line in [IO.File]::ReadLines($Config)) {
+                $Trimmed = $Line.Trim()
+                if (-not $InTickets) {
+                    if ($Trimmed -eq '"apptickets"') {
+                        $InTickets = $true
+                    }
+                    continue
+                }
+                if (-not $BlockOpened) {
+                    if ($Trimmed -eq '{') {
+                        $BlockOpened = $true
+                    }
+                    continue
+                }
+                if ($Trimmed -eq '}') {
+                    break
+                }
+                if ($Trimmed -match ('^"' + [regex]::Escape($AppId) + '"(?:\s|$)')) {
+                    return $true
+                }
+            }
+        }
+    }
+    return $false
+}
+
 if (-not $SourcePath) {
     $Detected = @(
         Get-BaronyInstallCandidates |
@@ -78,6 +180,15 @@ Install Barony 5.0.2 through Steam or GOG, then run this script with:
 $SourcePath = [IO.Path]::GetFullPath($SourcePath)
 if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
     throw "Barony installation directory does not exist: $SourcePath"
+}
+$SourceType = if ($SourcePath -match '(?i)steamapps[\\/]common') {
+    'steam'
+}
+elseif ($SourcePath -match '(?i)gog') {
+    'gog'
+}
+else {
+    'custom'
 }
 
 if (-not $OutputPath) {
@@ -170,32 +281,82 @@ foreach ($FileName in $RequiredFiles) {
         Join-Path $SourcePath $FileName)
 }
 
+$SteamRoots = if ($SourceType -eq 'steam') {
+    @(Get-SteamRootCandidates -InstallPath $SourcePath)
+}
+else {
+    @()
+}
+$DlcEntitlements = [System.Collections.Generic.List[object]]::new()
+$SteamUnlockedPacks = [System.Collections.Generic.List[string]]::new()
+foreach ($Dlc in $DlcDefinitions) {
+    $KeyPath = Join-Path $SourcePath $Dlc.KeyFile
+    $KeyPresent = Test-Path -LiteralPath $KeyPath -PathType Leaf
+    if ($KeyPresent) {
+        $KeyFile = Get-Item -LiteralPath $KeyPath
+        if ($KeyFile.Length -le 0 -or $KeyFile.Length -gt $DlcKeyMaximumBytes) {
+            throw "DLC key file has an invalid size: $($Dlc.KeyFile)"
+        }
+        $FilesByRelativePath[$Dlc.KeyFile] = $KeyFile
+    }
+
+    $SteamTicket = $false
+    if ($SourceType -eq 'steam') {
+        $SteamTicket = Test-SteamCachedAppTicket `
+            -SteamRoots $SteamRoots `
+            -AppId $Dlc.AppId
+    }
+    if ($SteamTicket) {
+        $SteamUnlockedPacks.Add($Dlc.Pack)
+        $DlcEntitlements.Add([ordered]@{
+            pack = $Dlc.Pack
+            source = 'steam-cached-ticket'
+        })
+        Write-Host "DLC entitlement: $($Dlc.Name) (cached Steam ticket)."
+    }
+    elseif ($KeyPresent) {
+        $DlcEntitlements.Add([ordered]@{
+            pack = $Dlc.Pack
+            source = 'key-file'
+        })
+        Write-Host "DLC entitlement: $($Dlc.Name) (license key; validated by Barony)."
+    }
+    else {
+        Write-Host "DLC entitlement not detected: $($Dlc.Name)."
+    }
+}
+
+$GeneratedFilesByRelativePath = [ordered]@{}
+if ($SteamUnlockedPacks.Count -gt 0) {
+    $UnlockLines = @(
+        '# Barony Android DLC entitlements detected from cached Steam app tickets.'
+        'format=1'
+    ) + @($SteamUnlockedPacks)
+    $GeneratedFilesByRelativePath[$DlcUnlockName] = [Text.Encoding]::UTF8.GetBytes(
+        (($UnlockLines -join "`n") + "`n"))
+}
+
 $SortedRelativePaths = @($FilesByRelativePath.Keys | Sort-Object)
 $UncompressedBytes = [long]0
 foreach ($RelativePath in $SortedRelativePaths) {
     $UncompressedBytes += $FilesByRelativePath[$RelativePath].Length
 }
-
-$SourceType = if ($SourcePath -match '(?i)steamapps[\\/]common') {
-    'steam'
+foreach ($GeneratedBytes in $GeneratedFilesByRelativePath.Values) {
+    $UncompressedBytes += $GeneratedBytes.Length
 }
-elseif ($SourcePath -match '(?i)gog') {
-    'gog'
-}
-else {
-    'custom'
-}
+$PayloadFileCount = $SortedRelativePaths.Count + $GeneratedFilesByRelativePath.Count
 
 $Manifest = [ordered]@{
     schemaVersion = 1
     gameVersion = $ExpectedGameVersion
     sourceCommit = $ExpectedSourceCommit
     deployedAtUtc = [DateTime]::UtcNow.ToString('o')
-    deploymentMethod = 'windows-archive-builder-v2'
+    deploymentMethod = 'windows-archive-builder-v3'
     sourceType = $SourceType
-    fileCount = $SortedRelativePaths.Count
+    fileCount = $PayloadFileCount
     uncompressedBytes = $UncompressedBytes
     criticalFiles = $CriticalHashes
+    dlcEntitlements = @($DlcEntitlements)
 }
 $ManifestBytes = [Text.Encoding]::UTF8.GetBytes(
     ($Manifest | ConvertTo-Json -Depth 4))
@@ -233,6 +394,20 @@ try {
     }
     finally {
         $ManifestStream.Dispose()
+    }
+
+    foreach ($RelativePath in $GeneratedFilesByRelativePath.Keys) {
+        $Entry = $Archive.CreateEntry(
+            $RelativePath,
+            [IO.Compression.CompressionLevel]::Optimal)
+        $EntryStream = $Entry.Open()
+        try {
+            $GeneratedBytes = $GeneratedFilesByRelativePath[$RelativePath]
+            $EntryStream.Write($GeneratedBytes, 0, $GeneratedBytes.Length)
+        }
+        finally {
+            $EntryStream.Dispose()
+        }
     }
 
     $Index = 0
@@ -277,7 +452,7 @@ try {
         [IO.Compression.ZipArchiveMode]::Read,
         $false)
     try {
-        if ($VerifyArchive.Entries.Count -ne ($SortedRelativePaths.Count + 1)) {
+        if ($VerifyArchive.Entries.Count -ne ($PayloadFileCount + 1)) {
             throw "Archive file count mismatch after creation."
         }
         if (-not $VerifyArchive.GetEntry($ManifestName)) {
@@ -302,6 +477,18 @@ try {
             }
             if ($EntryHash -ne $ExpectedCriticalHashes[$RelativePath]) {
                 throw "Archive verification failed for: $RelativePath"
+            }
+        }
+        foreach ($RelativePath in $GeneratedFilesByRelativePath.Keys) {
+            if (-not $VerifyArchive.GetEntry($RelativePath)) {
+                throw "Archive generated file is missing: $RelativePath"
+            }
+        }
+        foreach ($Dlc in $DlcDefinitions) {
+            $KeyPath = Join-Path $SourcePath $Dlc.KeyFile
+            if ((Test-Path -LiteralPath $KeyPath -PathType Leaf) `
+                    -and -not $VerifyArchive.GetEntry($Dlc.KeyFile)) {
+                throw "Archive DLC key file is missing: $($Dlc.KeyFile)"
             }
         }
     }
@@ -331,7 +518,7 @@ $SidecarPath = "$OutputPath.sha256"
 Write-Host ''
 Write-Host "Owned-data archive: $OutputPath"
 Write-Host "SHA-256: $ArchiveHash"
-Write-Host "Files: $($SortedRelativePaths.Count)"
+Write-Host "Files: $PayloadFileCount"
 Write-Host "Uncompressed data: $UncompressedBytes bytes"
 Write-Host "Source type: $SourceType"
 Write-Host ''

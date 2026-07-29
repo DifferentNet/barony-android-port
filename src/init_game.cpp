@@ -41,6 +41,9 @@
 #include "ui/GameUI.hpp"
 #include "ui/Text.hpp"
 #include "ui/MainMenu.hpp"
+#ifdef ANDROID
+#include "android_dlc_bridge.hpp"
+#endif
 
 #include <thread>
 #include <future>
@@ -294,6 +297,10 @@ int initGame()
 			}
 		}
 #endif // !NINTENDO
+#endif
+
+#ifdef ANDROID
+		androidApplyDLCEntitlements();
 #endif
 
 		removedEntities.first = NULL;

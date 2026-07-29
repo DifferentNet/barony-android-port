@@ -50,8 +50,8 @@ function Get-ConnectedDevices {
 
     $Devices = [System.Collections.Generic.List[string]]::new()
     foreach ($Line in $Lines) {
-        if ($Line -match '^([^\s]+)\s+device(?:\s|$)') {
-            $Devices.Add($Matches[1])
+        if ($Line -match '^(.+?)\s+device(?:\s|$)') {
+            $Devices.Add($Matches[1].Trim())
         }
     }
     return $Devices.ToArray()
@@ -247,6 +247,11 @@ $InputMarkers = @(
     'BARONY_ANDROID_TOUCH_VISIBILITY',
     'BARONY_ANDROID_TOUCH_LAYOUT'
 )
+$DlcMarkers = @(
+    'BARONY_ANDROID_DLC_ENTITLEMENT pack=mythsandoutcasts',
+    'BARONY_ANDROID_DLC_ENTITLEMENT pack=legendsandpariahs',
+    'BARONY_ANDROID_DLC_ENTITLEMENT pack=desertersanddisciples'
+)
 
 $StartupDeadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
 $AppProcessId = $null
@@ -278,7 +283,8 @@ do {
             [void]$ObservedStartupMarkers.Add($Marker)
         }
     }
-    foreach ($Marker in @($RendererMarkers + $InputMarkers + $AudioMarkers)) {
+    foreach ($Marker in @(
+            $RendererMarkers + $InputMarkers + $AudioMarkers + $DlcMarkers)) {
         if ($StartupLogText -match [regex]::Escape($Marker)) {
             [void]$ObservedDiagnosticMarkers.Add($Marker)
         }
@@ -292,10 +298,14 @@ do {
     $MissingInputAtStartup = @($InputMarkers | Where-Object {
         -not $ObservedDiagnosticMarkers.Contains($_)
     })
+    $MissingDlcAtStartup = @($DlcMarkers | Where-Object {
+        -not $ObservedDiagnosticMarkers.Contains($_)
+    })
     if (
         $MissingAtStartup.Count -eq 0 -and
         $MissingRendererAtStartup.Count -eq 0 -and
-        $MissingInputAtStartup.Count -eq 0
+        $MissingInputAtStartup.Count -eq 0 -and
+        $MissingDlcAtStartup.Count -eq 0
     ) {
         break
     }
@@ -363,7 +373,8 @@ foreach ($Marker in $RequiredMarkers) {
         [void]$ObservedStartupMarkers.Add($Marker)
     }
 }
-foreach ($Marker in @($RendererMarkers + $InputMarkers + $AudioMarkers)) {
+foreach ($Marker in @(
+        $RendererMarkers + $InputMarkers + $AudioMarkers + $DlcMarkers)) {
     if ($CombinedLogText -match [regex]::Escape($Marker)) {
         [void]$ObservedDiagnosticMarkers.Add($Marker)
     }
@@ -389,6 +400,19 @@ $ObservedInputMarkers = @($InputMarkers | Where-Object {
 $MissingInputMarkers = @($InputMarkers | Where-Object {
     -not $ObservedDiagnosticMarkers.Contains($_)
 })
+$ObservedDlcMarkers = @($DlcMarkers | Where-Object {
+    $ObservedDiagnosticMarkers.Contains($_)
+})
+$MissingDlcMarkers = @($DlcMarkers | Where-Object {
+    -not $ObservedDiagnosticMarkers.Contains($_)
+})
+$DlcEntitlementStates = [ordered]@{}
+foreach ($Match in [regex]::Matches(
+        $CombinedLogText,
+        'BARONY_ANDROID_DLC_ENTITLEMENT pack=([a-z]+) enabled=([01]) source=([a-z-]+)')) {
+    $DlcEntitlementStates[$Match.Groups[1].Value] =
+        "enabled=$($Match.Groups[2].Value) source=$($Match.Groups[3].Value)"
+}
 $CrashPattern = 'FATAL EXCEPTION|Fatal signal|ANR in com\.zhdan\.baronyport|am_crash|BARONY_ANDROID_STARTUP_FAILED|BARONY_ANDROID_FRAMEBUFFER_INCOMPLETE|BARONY_ANDROID_SHADER_(?:COMPILE|LINK)_FAILED|BARONY_ANDROID_GL_OUT_OF_MEMORY|GL_INVALID_FRAMEBUFFER_OPERATION'
 $CrashLines = @($LogcatLines + $GameLogLines | Where-Object { $_ -match $CrashPattern })
 
@@ -425,6 +449,7 @@ $AppStillRunning = $null -ne (Get-AppProcessId)
 $Failed = $MissingMarkers.Count -gt 0 `
     -or $MissingRendererMarkers.Count -gt 0 `
     -or $MissingInputMarkers.Count -gt 0 `
+    -or $MissingDlcMarkers.Count -gt 0 `
     -or $CrashLines.Count -gt 0
 $AudioWarning = $null -ne $UnderrunDelta -and $UnderrunDelta -gt 0
 $Verdict = if ($Failed) {
@@ -448,6 +473,11 @@ $Summary.Add("renderer_diagnostics_observed=$($ObservedRendererMarkers -join ','
 $Summary.Add("renderer_diagnostics_missing=$($MissingRendererMarkers -join ',')")
 $Summary.Add("input_diagnostics_observed=$($ObservedInputMarkers -join ',')")
 $Summary.Add("input_diagnostics_missing=$($MissingInputMarkers -join ',')")
+$Summary.Add("dlc_diagnostics_observed=$($ObservedDlcMarkers -join ',')")
+$Summary.Add("dlc_diagnostics_missing=$($MissingDlcMarkers -join ',')")
+foreach ($Pack in $DlcEntitlementStates.Keys) {
+    $Summary.Add("dlc_entitlement_$Pack=$($DlcEntitlementStates[$Pack])")
+}
 $Summary.Add("audio_diagnostics_observed=$($ObservedAudioMarkers -join ',')")
 $Summary.Add("audio_diagnostics_not_observed=$($MissingAudioMarkers -join ',')")
 $Summary.Add("audio_underruns_start=$StartUnderruns")
@@ -466,6 +496,10 @@ Write-Host "Result: $Verdict"
 Write-Host "Required startup markers: $($RequiredMarkers.Count - $MissingMarkers.Count)/$($RequiredMarkers.Count)"
 Write-Host "Renderer diagnostics observed: $($ObservedRendererMarkers.Count)/$($RendererMarkers.Count)"
 Write-Host "Input diagnostics observed: $($ObservedInputMarkers.Count)/$($InputMarkers.Count)"
+Write-Host "DLC diagnostics observed: $($ObservedDlcMarkers.Count)/$($DlcMarkers.Count)"
+foreach ($Pack in $DlcEntitlementStates.Keys) {
+    Write-Host "DLC entitlement $Pack`: $($DlcEntitlementStates[$Pack])"
+}
 Write-Host "Audio diagnostics observed: $($ObservedAudioMarkers.Count)/$($AudioMarkers.Count)"
 if ($null -ne $UnderrunDelta) {
     Write-Host "Maximum app-track underrun frames: $StartUnderruns -> $EndUnderruns (delta $UnderrunDelta)"
@@ -484,6 +518,9 @@ if ($MissingRendererMarkers.Count) {
 }
 if ($MissingInputMarkers.Count) {
     Write-Warning "Missing input diagnostics: $($MissingInputMarkers -join ', ')"
+}
+if ($MissingDlcMarkers.Count) {
+    Write-Warning "Missing DLC diagnostics: $($MissingDlcMarkers -join ', ')"
 }
 if ($CrashLines.Count) {
     Write-Warning "Potential crash/startup-failure lines: $($CrashLines.Count)"

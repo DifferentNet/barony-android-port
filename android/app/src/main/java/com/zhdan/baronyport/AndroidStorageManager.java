@@ -76,6 +76,10 @@ final class AndroidStorageManager {
                     "npcnames-male.txt",
                     "playernames-female.txt",
                     "playernames-male.txt",
+                    "dlc.unlock",
+                    "mythsandoutcasts.key",
+                    "legendsandpariahs.key",
+                    "desertersanddisciples.key",
                     DATA_MANIFEST_NAME)));
 
     private final BaronyActivity host;

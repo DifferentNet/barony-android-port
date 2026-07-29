@@ -13,6 +13,11 @@ installation, copy the generated ZIP to the Android device, then select
 **Import archive** when the port starts. The ZIP remains the user's private
 commercial data and must not be shared.
 
+Beta 4 users who want to enable owned DLC must download the Beta 5 archive
+builder, create a new owned-data ZIP, and import it through **Data & Saves**.
+Archives created with the older builder do not contain the DLC entitlement
+transfer file.
+
 See [ANDROID.md](ANDROID.md) for checksum verification, installation
 alternatives, controls, save backups, limitations, and source-build
 instructions. Releases also include checksums and an ADB data installer for

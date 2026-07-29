@@ -33,7 +33,7 @@ release notes describe your device or problem.
 Verify the APK before installing it:
 
 ```powershell
-$apk = '.\Barony-Android-Port-5.0.2-android-beta4-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta5-arm64-v8a.apk'
 (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
 Get-Content "$apk.sha256"
 ```
@@ -149,7 +149,7 @@ You can also install or update the APK through ADB:
 
 ```powershell
 $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
-$apk = '.\Barony-Android-Port-5.0.2-android-beta4-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta5-arm64-v8a.apk'
 & $adb devices
 & $adb install -r $apk
 ```
@@ -163,6 +163,11 @@ if anything is missing or incompatible.
 
 Install updates over the existing app; do not uninstall first. Android removes
 app-specific files when an app is uninstalled, including internal saves.
+
+When updating from Beta 4 to Beta 5, existing game data remains playable.
+To enable owned DLC, download the Beta 5 archive builder, create a new
+owned-data ZIP, and import it through **Data & Saves**. Archives created with
+the Beta 4 builder do not contain the DLC entitlement transfer file.
 
 From the root Barony main menu, select **Data & Saves**:
 
@@ -288,7 +293,7 @@ Back up the generated keystore and password securely. Losing the signing key pre
 Build and verify a signed release:
 
 ```powershell
-.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-next -VersionCode 5000217
+.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-next -VersionCode 5000218
 ```
 
 Use a unique version name and a version code greater than every previously

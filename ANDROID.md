@@ -33,7 +33,7 @@ release notes describe your device or problem.
 Verify the APK before installing it:
 
 ```powershell
-$apk = '.\Barony-Android-Port-5.0.2-android-beta5-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta6-arm64-v8a.apk'
 (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
 Get-Content "$apk.sha256"
 ```
@@ -149,7 +149,7 @@ You can also install or update the APK through ADB:
 
 ```powershell
 $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
-$apk = '.\Barony-Android-Port-5.0.2-android-beta5-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta6-arm64-v8a.apk'
 & $adb devices
 & $adb install -r $apk
 ```
@@ -168,6 +168,10 @@ When updating from Beta 4 to Beta 5, existing game data remains playable.
 To enable owned DLC, download the Beta 5 archive builder, create a new
 owned-data ZIP, and import it through **Data & Saves**. Archives created with
 the Beta 4 builder do not contain the DLC entitlement transfer file.
+
+Beta 6 can be installed directly over Beta 5. Existing Beta 5 owned data, DLC
+entitlements, saves, and settings remain compatible, so the archive does not
+need to be rebuilt for this update.
 
 From the root Barony main menu, select **Data & Saves**:
 
@@ -208,6 +212,17 @@ The **Settings → Video** screen provides mobile performance presets:
 New installations default to the balanced 1080p render preset and a
 conservative 60 FPS limit. Both settings are saved in `config/config.json` and
 apply without restarting the Activity.
+
+## Reporting Android problems
+
+Use the
+[structured Android bug form](https://github.com/DifferentNet/barony-android-port/issues/new?template=android-bug-report.yml)
+and include the device model, GPU, Android version, port build, owned-data
+version, selected render/FPS preset, and exact reproduction steps. Recent
+`BARONY_ANDROID_*` log markers are useful when available.
+
+Never attach owned game-data archives, DLC entitlement files, Steam
+configuration, credentials, or other private commercial data to an issue.
 
 ## Current limitations
 

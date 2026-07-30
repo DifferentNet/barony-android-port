@@ -1,0 +1,146 @@
+name: Android bug report
+description: Report an Android port problem with device and renderer details.
+title: "[Android] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping test the Android port.
+
+        Do not attach owned game-data archives, DLC entitlement files, Steam configuration, credentials, save archives containing private information, or other commercial data. Logs should contain only the relevant port markers and error lines.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Problem area
+      options:
+        - Startup or installation
+        - Owned-data import or validation
+        - Graphics or rendering
+        - Performance or thermal behavior
+        - Gamepad, touch, mouse, or keyboard input
+        - Audio
+        - Background, resume, or lifecycle
+        - Saves or settings
+        - DLC entitlement or DLC gameplay
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: build
+    attributes:
+      label: Android port build
+      description: Use the version shown by Android or the release filename.
+      placeholder: 5.0.2-android-beta6
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device model
+      placeholder: Samsung Galaxy S24 Ultra / SM-S928B
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU
+      description: Include the GPU model when known.
+      placeholder: Adreno 750
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: Android 16 / API 36
+    validations:
+      required: true
+
+  - type: input
+    id: data_version
+    attributes:
+      label: Owned Barony data version
+      placeholder: Barony 5.0.2 from Steam or GOG
+    validations:
+      required: true
+
+  - type: dropdown
+    id: render_preset
+    attributes:
+      label: Render-resolution preset
+      options:
+        - 720p
+        - 1080p
+        - Native
+        - Not applicable or unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frame_rate
+    attributes:
+      label: Frame-rate limit
+      options:
+        - 60 FPS
+        - 90 FPS
+        - 120 FPS
+        - Not applicable or unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: List the shortest reliable sequence that triggers the problem.
+      placeholder: |
+        1. Start the port.
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include frequency, visible symptoms, and whether the app recovered.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant diagnostics
+      description: Paste only relevant BARONY_ANDROID_* markers, crash lines, or renderer errors. Remove private paths or account information.
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Controller model, output device, screenshots, thermal state, or anything else that may help.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmation
+      options:
+        - label: I tested the current normal prerelease, or explained above why I could not.
+          required: true
+        - label: I searched existing issues for the same device and symptom.
+          required: true
+        - label: I did not attach or offer any owned-data or entitlement archive.
+          required: true

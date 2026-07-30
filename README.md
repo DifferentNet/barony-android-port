@@ -8,15 +8,18 @@ The Android package contains engine code and open-source dependency notices only
 
 Download the APK and owned-data archive builder from the
 [GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
+The current normal prerelease is
+[Barony Android Port 5.0.2 Beta 6](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-beta6).
 Run the builder on a Windows PC with an owned Steam or GOG Barony v5.0.2
 installation, copy the generated ZIP to the Android device, then select
 **Import archive** when the port starts. The ZIP remains the user's private
 commercial data and must not be shared.
 
-Beta 4 users who want to enable owned DLC must download the Beta 5 archive
-builder, create a new owned-data ZIP, and import it through **Data & Saves**.
-Archives created with the older builder do not contain the DLC entitlement
-transfer file.
+Beta 4 users who want to enable owned DLC must download the archive builder
+from Beta 5 or newer, create a new owned-data ZIP, and import it through
+**Data & Saves**. Archives created with the older builder do not contain the
+DLC entitlement transfer file. Beta 5 archives remain compatible with Beta 6
+and do not need to be rebuilt.
 
 See [ANDROID.md](ANDROID.md) for checksum verification, installation
 alternatives, controls, save backups, limitations, and source-build
@@ -29,6 +32,9 @@ advanced fallback use.
 - OpenGL ES 3 rendering.
 - Offline single-player gameplay.
 - Physical gamepads and automatic on-screen touch controls.
+- 720p, 1080p, and native 3D render-resolution presets with native-resolution
+  menus and text.
+- 60, 90, and 120 FPS limits.
 - Music and sound through OpenAL Soft.
 - App-specific game-data storage without broad storage permissions.
 - In-app import of validated owned-data ZIP archives.
@@ -41,6 +47,12 @@ Multiplayer services, achievements, workshop integration, and public-store packa
 GPU compatibility testing is ongoing. Use the normal beta for general testing;
 focused prereleases on the releases page are intended for the affected devices
 described in their release notes.
+
+Report Android problems with the
+[structured Android bug form](https://github.com/DifferentNet/barony-android-port/issues/new?template=android-bug-report.yml).
+Include the device, GPU, Android version, build, selected render/FPS preset,
+and reproduction steps. Never attach owned game-data archives, DLC entitlement
+files, Steam configuration, credentials, or other private commercial data.
 
 ---
 

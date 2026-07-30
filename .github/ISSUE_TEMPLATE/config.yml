@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Android installation and usage guide
+    url: https://github.com/DifferentNet/barony-android-port/blob/main/ANDROID.md
+    about: Read setup, data import, controls, updates, and troubleshooting guidance.
+  - name: Android releases
+    url: https://github.com/DifferentNet/barony-android-port/releases
+    about: Download the current normal prerelease and verify its checksum.

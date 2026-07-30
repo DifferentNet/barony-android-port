@@ -194,6 +194,21 @@ Without a gamepad, the port selects one of three touch layouts automatically:
 
 Mouse and keyboard input are also supported through Android.
 
+## Graphics and performance
+
+The **Settings → Video** screen provides mobile performance presets:
+
+- **Render Resolution:** 720p, 1080p, or Native. The setting scales the 3D
+  world while menus, text, HUD elements, and touch coordinates remain at the
+  native display resolution. Presets never upscale a display whose short edge
+  is already below the selected resolution.
+- **Frame Rate Limit:** 60, 90, or 120 FPS. Lower limits reduce GPU load,
+  battery use, and sustained device temperature.
+
+New installations default to the balanced 1080p render preset and a
+conservative 60 FPS limit. Both settings are saved in `config/config.json` and
+apply without restarting the Activity.
+
 ## Current limitations
 
 - Offline single-player is the tested mode.
@@ -280,6 +295,33 @@ Pass `-SourcePath` for a non-default Steam/GOG installation and `-OutputPath`
 to choose the ZIP destination. Generated owned-data archives are private user
 artifacts and must never be committed or attached to a public release.
 
+## Physical-device regression
+
+Run a startup-only check against the currently installed APK:
+
+```powershell
+.\tools\test-device.ps1 -SkipInstall -Profile Startup
+```
+
+Use the performance profile for a timed renderer sample:
+
+```powershell
+.\tools\test-device.ps1 `
+    -SkipInstall `
+    -Profile Performance `
+    -DurationMinutes 5 `
+    -ExpectedRenderPreset 1080p `
+    -ExpectedFrameRate 60
+```
+
+The harness captures Logcat and required port markers, a screenshot, memory and
+Android UI frame statistics, native SurfaceFlinger presentation timing, display
+mode/refresh information, battery state, and thermal readings. It fails on
+missing startup/renderer/input/DLC diagnostics, an unexpected render policy,
+incomplete framebuffers, named shader or GL failures, crashes, ANRs, or native
+process death. Keep the device awake and unlocked, and use `-Serial` when more
+than one ADB target is connected.
+
 ## Signed release builds
 
 Create a local signing identity once:
@@ -297,7 +339,11 @@ Build and verify a signed release:
 ```
 
 Use a unique version name and a version code greater than every previously
-published build when preparing a later update.
+published build when preparing a later update. Both values are mandatory.
+Release builds refuse a dirty worktree by default. `-AllowDirtyWorktree` exists
+only for explicitly local test artifacts; never publish an artifact made with
+that override. SDK discovery honors `ANDROID_SDK_ROOT`, then `ANDROID_HOME`,
+before using the default per-user Android SDK.
 
 The release script verifies:
 
@@ -309,6 +355,9 @@ The release script verifies:
 
 It writes the APK, SHA-256 checksum, build metadata, standalone ADB data
 installer, and owned-data archive builder under ignored `android\artifacts\`.
+Build metadata records the source commit, dirty-tree state, Java/Gradle/AGP,
+SDK/build-tools/NDK/CMake versions, Gradle distribution checksum, and every
+pinned dependency revision.
 
 ## License and ownership
 

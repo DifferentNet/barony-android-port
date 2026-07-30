@@ -10,6 +10,9 @@
 -------------------------------------------------------------------------------*/
 
 #include "main.hpp"
+#ifdef ANDROID
+#include "android_video_bridge.hpp"
+#endif
 #include "draw.hpp"
 #include "entity.hpp"
 #include "files.hpp"
@@ -1071,6 +1074,20 @@ void glBeginCamera(view_t* camera, bool useHDR, map_t& map)
     fog_color.z *= fog_color.w;
     fog_color.w = 1.f;
 #endif
+
+    int renderWidth = camera->winw;
+    int renderHeight = camera->winh;
+    bool renderOffscreen = hdr;
+#ifdef ANDROID
+    AndroidVideo::logRenderPolicy(xres, yres, fpsLimit);
+    const auto androidRenderSize = AndroidVideo::getRenderSize(
+        camera->winw, camera->winh, xres, yres);
+    renderWidth = androidRenderSize.width;
+    renderHeight = androidRenderSize.height;
+    renderOffscreen = renderOffscreen
+        || renderWidth != camera->winw
+        || renderHeight != camera->winh;
+#endif
     
     int lightmapIndex = 0;
     int player = -1;
@@ -1082,14 +1099,14 @@ void glBeginCamera(view_t* camera, bool useHDR, map_t& map)
         }
     }
 
-    if (hdr) {
+    if (renderOffscreen) {
         const int numFbs = sizeof(view_t::fb) / sizeof(view_t::fb[0]);
         const int fbIndex = camera->drawnFrames % numFbs;
-        camera->fb[fbIndex].init(camera->winw, camera->winh, GL_LINEAR, GL_LINEAR);
+        camera->fb[fbIndex].init(renderWidth, renderHeight, GL_LINEAR, GL_LINEAR);
         camera->fb[fbIndex].bindForWriting();
         GL_CHECK_ERR(glClearColor(fog_color.x, fog_color.y, fog_color.z, fog_color.w));
         GL_CHECK_ERR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-        GL_CHECK_ERR(glScissor(0, 0, camera->winw, camera->winh));
+        GL_CHECK_ERR(glScissor(0, 0, renderWidth, renderHeight));
     } else {
 #ifndef EDITOR
         if ( *cvar_fogDistance > 0.f && player == 0 )
@@ -1224,18 +1241,28 @@ void glEndCamera(view_t* camera, bool useHDR, map_t& map)
     const int hdr_samples = *cvar_hdrSamples;
     const Vector4 hdr_luma = *cvar_hdrLuma;
 #endif
+
+    bool renderOffscreen = hdr;
+#ifdef ANDROID
+    const auto androidRenderSize = AndroidVideo::getRenderSize(
+        camera->winw, camera->winh, xres, yres);
+    renderOffscreen = renderOffscreen
+        || androidRenderSize.width != camera->winw
+        || androidRenderSize.height != camera->winh;
+#endif
     
     const int numFbs = sizeof(view_t::fb) / sizeof(view_t::fb[0]);
     const int fbIndex = camera->drawnFrames % numFbs;
     
-    if (hdr) {
+    if (renderOffscreen) {
         // update viewport
         camera->fb[fbIndex].unbindForWriting();
         GL_CHECK_ERR(glGetIntegerv(GL_VIEWPORT, oldViewport));
         GL_CHECK_ERR(glViewport(camera->winx, yres - camera->winh - camera->winy, camera->winw, camera->winh));
         
-        // calculate luminance
         camera->fb[fbIndex].bindForReading();
+        if (hdr) {
+        // calculate luminance
 #ifdef ANDROID
         // Full-resolution half-float framebuffer readback is prohibitively
         // expensive on tile-based mobile GPUs and is a suspected trigger for
@@ -1330,6 +1357,9 @@ void glEndCamera(view_t* camera, bool useHDR, map_t& map)
         
         // blit framebuffer
         camera->fb[fbIndex].hdrDraw(brightness, gamma, exposure);
+        } else {
+            camera->fb[fbIndex].draw();
+        }
         camera->fb[fbIndex].unbindForReading();
         
         // revert viewport
@@ -2572,6 +2602,12 @@ static unsigned int oldpix = 0;
 
 unsigned int GO_GetPixelU32(int x, int y, view_t& camera)
 {
+#ifdef ANDROID
+    // Entity-ID readback must remain at native resolution. Scaling the ID
+    // buffer would interpolate adjacent entity colors and make selection
+    // unreliable around model edges.
+    AndroidVideo::ScopedNativeRenderScale nativeRenderScale;
+#endif
     if (!dirty && (oldx==x) && (oldy==y)) {
         return oldpix;
     }

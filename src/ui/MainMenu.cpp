@@ -27,6 +27,9 @@
 #include "../book.hpp"
 #include "../scrolls.hpp"
 #include "../android_data_bridge.hpp"
+#ifdef ANDROID
+#include "../android_video_bridge.hpp"
+#endif
 
 #include <cassert>
 #include <functional>
@@ -77,7 +80,12 @@ namespace MainMenu {
 	ConsoleVariable<float> cvar_worldtooltip_scale_splitscreen("/worldtooltip_scale_splitscreen", 150.0);
 	ConsoleVariable<bool> cvar_hold_to_activate("/hold_to_activate", true);
 	ConsoleVariable<float> cvar_enemybar_scale("/enemybar_scale", 100.0);
+#ifdef ANDROID
+    ConsoleVariable<int> cvar_desiredFps(
+        "/desiredfps", AndroidVideo::DEFAULT_FRAME_RATE);
+#else
     ConsoleVariable<int> cvar_desiredFps("/desiredfps", AUTO_FPS);
+#endif
     ConsoleVariable<int> cvar_displayHz("/displayhz", 0);
 	ConsoleVariable<bool> cvar_hdrEnabled("/hdr_enabled", true);
 	static const int numFilters = NUM_SERVER_FLAGS + 2;
@@ -625,7 +633,12 @@ namespace MainMenu {
 		int shootmode_crosshair_opacity = 50;
 		bool hdr_enabled = true;
 		float fov = 60.f;
+#ifdef ANDROID
+		int android_render_scale = AndroidVideo::DEFAULT_RENDER_SCALE;
+		float fps = AndroidVideo::DEFAULT_FRAME_RATE;
+#else
 		float fps = AUTO_FPS;
+#endif
 		std::string audio_device = "";
 		std::string recording_audio_device = "";
 		bool recording_loopback = false;
@@ -2936,6 +2949,12 @@ namespace MainMenu {
 		*clipped_splitscreen = clipped_split_enabled;
 		TimerExperiments::bUseTimerInterpolation = use_frame_interpolation;
 		::fov = std::min(std::max(40.f, fov), 100.f);
+#ifdef ANDROID
+        android_render_scale = AndroidVideo::sanitizeRenderScalePreset(
+            android_render_scale);
+        AndroidVideo::setRenderScalePreset(android_render_scale);
+        fps = AndroidVideo::sanitizeFrameRate(static_cast<int>(fps));
+#endif
         *cvar_desiredFps = (int)fps;
         if (*cvar_desiredFps == AUTO_FPS) {
             if (*cvar_displayHz) {
@@ -3078,6 +3097,9 @@ namespace MainMenu {
 		settings.use_frame_interpolation = TimerExperiments::bUseTimerInterpolation;
 		settings.fov = ::fov;
 		settings.fps = *cvar_desiredFps;
+#ifdef ANDROID
+		settings.android_render_scale = AndroidVideo::getRenderScalePreset();
+#endif
 		settings.audio_device = current_audio_device;
 		settings.recording_audio_device = current_recording_audio_device;
 #ifdef USE_FMOD
@@ -3138,7 +3160,7 @@ namespace MainMenu {
 	}
 
 	bool AllSettings::serialize(FileInterface* file) {
-	    int version = 25;
+	    int version = 26;
 	    file->property("version", version);
 	    file->property("mods", mods);
 		file->property("crossplay_enabled", crossplay_enabled);
@@ -3205,10 +3227,26 @@ namespace MainMenu {
         }
 		file->property("fov", fov);
         if (version < 8) {
+#ifdef ANDROID
+            fps = AndroidVideo::DEFAULT_FRAME_RATE;
+#else
             fps = AUTO_FPS;
+#endif
         } else {
             file->property("fps", fps);
         }
+#ifdef ANDROID
+        file->propertyVersion(
+            "android_render_scale",
+            version >= 26,
+            android_render_scale);
+        if (version < 26 && static_cast<int>(fps) == AUTO_FPS) {
+            fps = AndroidVideo::DEFAULT_FRAME_RATE;
+        }
+        fps = AndroidVideo::sanitizeFrameRate(static_cast<int>(fps));
+        android_render_scale = AndroidVideo::sanitizeRenderScalePreset(
+            android_render_scale);
+#endif
 		file->propertyVersion("use_hdr", version >= 11, hdr_enabled);
 		file->propertyVersion("audio_device", version >= 4, audio_device);
 		file->propertyVersion("recording_audio_device", version >= 22, recording_audio_device);
@@ -4590,9 +4628,55 @@ namespace MainMenu {
 		settingsOpenDropdown(button, "resolution", DropdownType::Wide, settingsResolutionEntry);
 	}
 
-    static void settingsResolutionBig(Button& button) {
+	static void settingsResolutionBig(Button& button) {
 		settingsOpenDropdown(button, "resolution", DropdownType::Wide, settingsResolutionEntry);
 	}
+
+#ifdef ANDROID
+	static void settingsAndroidRenderScale(Button& button) {
+		settingsOpenDropdown(button, "render_scale", DropdownType::Short, [](Frame::entry_t& entry) {
+			soundActivate();
+			unsigned int index = 0;
+			memcpy(&index, &entry.data, sizeof(index));
+			static constexpr int presets[] = {
+				AndroidVideo::RENDER_SCALE_720P,
+				AndroidVideo::RENDER_SCALE_1080P,
+				AndroidVideo::RENDER_SCALE_NATIVE,
+			};
+			if (index < sizeof(presets) / sizeof(presets[0])) {
+				allSettings.android_render_scale = presets[index];
+			}
+
+			auto settings = main_menu_frame->findFrame("settings"); assert(settings);
+			auto settings_subwindow = settings->findFrame("settings_subwindow"); assert(settings_subwindow);
+			auto selected = settings_subwindow->findButton("setting_render_scale_dropdown_button"); assert(selected);
+			auto dropdown = settings_subwindow->findFrame("setting_render_scale_dropdown"); assert(dropdown);
+			selected->setText(entry.name.c_str());
+			dropdown->removeSelf();
+			selected->select();
+		});
+	}
+
+	static void settingsAndroidFrameRate(Button& button) {
+		settingsOpenDropdown(button, "frame_rate", DropdownType::Short, [](Frame::entry_t& entry) {
+			soundActivate();
+			unsigned int index = 0;
+			memcpy(&index, &entry.data, sizeof(index));
+			static constexpr int limits[] = {60, 90, 120};
+			if (index < sizeof(limits) / sizeof(limits[0])) {
+				allSettings.fps = limits[index];
+			}
+
+			auto settings = main_menu_frame->findFrame("settings"); assert(settings);
+			auto settings_subwindow = settings->findFrame("settings_subwindow"); assert(settings_subwindow);
+			auto selected = settings_subwindow->findButton("setting_frame_rate_dropdown_button"); assert(selected);
+			auto dropdown = settings_subwindow->findFrame("setting_frame_rate_dropdown"); assert(dropdown);
+			selected->setText(entry.name.c_str());
+			dropdown->removeSelf();
+			selected->select();
+		});
+	}
+#endif
 
 	static void settingsDisplayDevice(Button& button) {
 		settingsOpenDropdown(button, "device", DropdownType::Short, [](Frame::entry_t& entry){
@@ -6430,7 +6514,9 @@ bind_failed:
 		if ((settings_subwindow = settingsSubwindowSetup(button.getName(), video_refresh != 0)) == nullptr) {
 			auto settings = main_menu_frame->findFrame("settings"); assert(settings);
 			auto settings_subwindow = settings->findFrame("settings_subwindow"); assert(settings_subwindow);
-#ifdef NINTENDO
+#ifdef ANDROID
+			settingsSelect(*settings_subwindow, {Setting::Type::Dropdown, "render_scale"});
+#elif defined(NINTENDO)
 			settingsSelect(*settings_subwindow, {Setting::Type::Boolean, "vertical_split"});
 #else
 			settingsSelect(*settings_subwindow, {Setting::Type::Dropdown, "resolution"});
@@ -6439,7 +6525,7 @@ bind_failed:
 		}
 		int y = 0;
 
-#ifndef NINTENDO
+#if !defined(NINTENDO) && !defined(ANDROID)
 		int selected_res = -1;
 		std::list<resolution> resolutions;
 		getResolutionList(allSettings.video.display_id, resolutions);
@@ -6496,12 +6582,64 @@ bind_failed:
 		y += settingsAddBooleanOption(*settings_subwindow, y, "vsync", Language::get(5162), Language::get(5163),
 			allSettings.video.vsync_enabled, [](Button& button){soundToggleSetting(button); allSettings.video.vsync_enabled = button.isPressed();});
 #endif
+#ifdef ANDROID
+		static const std::vector<const char*> renderScalePresets = {
+			"720p",
+			"1080p",
+			"Native",
+		};
+		const int renderScale = AndroidVideo::sanitizeRenderScalePreset(
+			allSettings.android_render_scale);
+		const char* selectedRenderScale =
+			renderScale == AndroidVideo::RENDER_SCALE_720P
+				? renderScalePresets[0]
+				: (renderScale == AndroidVideo::RENDER_SCALE_NATIVE
+					? renderScalePresets[2]
+					: renderScalePresets[1]);
+
+		static const std::vector<const char*> frameRatePresets = {
+			"60 FPS",
+			"90 FPS",
+			"120 FPS",
+		};
+		const int frameRate = AndroidVideo::sanitizeFrameRate(
+			static_cast<int>(allSettings.fps));
+		const char* selectedFrameRate =
+			frameRate == 90
+				? frameRatePresets[1]
+				: (frameRate == 120
+					? frameRatePresets[2]
+					: frameRatePresets[0]);
+
+		y += settingsAddSubHeader(
+			*settings_subwindow, y, "performance", "Performance");
+		y += settingsAddDropdown(
+			*settings_subwindow,
+			y,
+			"render_scale",
+			"Render Resolution",
+			"Sets the 3D world resolution. Menus and text remain sharp.",
+			false,
+			renderScalePresets,
+			selectedRenderScale,
+			settingsAndroidRenderScale);
+		y += settingsAddDropdown(
+			*settings_subwindow,
+			y,
+			"frame_rate",
+			"Frame Rate Limit",
+			"Limits frame rate to reduce heat, battery use, and GPU load.",
+			false,
+			frameRatePresets,
+			selectedFrameRate,
+			settingsAndroidFrameRate);
+#endif
 		y += settingsAddSubHeader(*settings_subwindow, y, "options", Language::get(5164));
 		y += settingsAddSlider(*settings_subwindow, y, "gamma", Language::get(5165), Language::get(5166),
 			allSettings.video.gamma, 50, 200, sliderPercent, [](Slider& slider){soundSliderSetting(slider, true); allSettings.video.gamma = slider.getValue();});
 		y += settingsAddSlider(*settings_subwindow, y, "fov", Language::get(5167), Language::get(5168),
 			allSettings.fov, 40, 100, nullptr, [](Slider& slider){soundSliderSetting(slider, true); allSettings.fov = slider.getValue();});
-#ifndef NINTENDO
+#if !defined(NINTENDO) && !defined(ANDROID)
         auto sliderFPS = [](float v) -> const char* {
             if ((int)v == AUTO_FPS) {
                 return Language::get(5181);
@@ -6514,6 +6652,8 @@ bind_failed:
         
 		y += settingsAddSlider(*settings_subwindow, y, "fps", Language::get(5169), Language::get(5170),
 			allSettings.fps ? allSettings.fps : AUTO_FPS, MIN_FPS, AUTO_FPS, sliderFPS, [](Slider& slider){soundSliderSetting(slider, true); allSettings.fps = slider.getValue();});
+#endif
+#ifndef NINTENDO
 		y += settingsAddBooleanOption(*settings_subwindow, y, "hdr_enabled", Language::get(5171), Language::get(5172),
 			allSettings.hdr_enabled, [](Button& button) {soundToggleSetting(button); allSettings.hdr_enabled = button.isPressed(); });
 		y += settingsAddBooleanOption(*settings_subwindow, y, "use_frame_interpolation", Language::get(5173), Language::get(5174),
@@ -6526,7 +6666,7 @@ bind_failed:
 		y += settingsAddBooleanOption(*settings_subwindow, y, "staggered_split", Language::get(5179), Language::get(5180),
 			allSettings.staggered_split_enabled, [](Button& button){soundToggleSetting(button); allSettings.staggered_split_enabled = button.isPressed();});
 
-#ifndef NINTENDO
+#if !defined(NINTENDO) && !defined(ANDROID)
 		hookSettings(*settings_subwindow,{
             {Setting::Type::Dropdown, "resolution"},
 			{Setting::Type::Dropdown, "device"},
@@ -6545,6 +6685,21 @@ bind_failed:
 
 		settingsSubwindowFinalize(*settings_subwindow, y, {Setting::Type::Dropdown, "resolution"});
 		settingsSelect(*settings_subwindow, {Setting::Type::Dropdown, "resolution"});
+#elif defined(ANDROID)
+		hookSettings(*settings_subwindow,{
+			{Setting::Type::Dropdown, "render_scale"},
+			{Setting::Type::Dropdown, "frame_rate"},
+			{Setting::Type::Slider, "gamma"},
+			{Setting::Type::Slider, "fov"},
+			{Setting::Type::Boolean, "hdr_enabled"},
+			{Setting::Type::Boolean, "use_frame_interpolation"},
+			{Setting::Type::Boolean, "vertical_split"},
+			{Setting::Type::Boolean, "clipped_split"},
+			{Setting::Type::Boolean, "staggered_split"},
+			});
+
+		settingsSubwindowFinalize(*settings_subwindow, y, {Setting::Type::Dropdown, "render_scale"});
+		settingsSelect(*settings_subwindow, {Setting::Type::Dropdown, "render_scale"});
 #else
 		hookSettings(*settings_subwindow,{
 			{Setting::Type::Slider, "gamma"},

@@ -1,10 +1,13 @@
 [CmdletBinding()]
 param(
     [switch]$Clean,
+    [Parameter(Mandatory)]
     [ValidateRange(1, 2100000000)]
-    [int]$VersionCode = 5000201,
+    [int]$VersionCode,
+    [Parameter(Mandatory)]
     [ValidatePattern('^[0-9A-Za-z._-]+$')]
-    [string]$VersionName = '5.0.2-android-beta1'
+    [string]$VersionName,
+    [switch]$AllowDirtyWorktree
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,6 +15,22 @@ $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $AndroidRoot = Join-Path $RepositoryRoot 'android'
 $SigningPropertiesPath = Join-Path $AndroidRoot 'release-signing.properties'
 $BuildScript = Join-Path $PSScriptRoot 'build-smoke.ps1'
+
+function Find-AndroidSdk {
+    $Candidates = @(
+        $env:ANDROID_SDK_ROOT,
+        $env:ANDROID_HOME,
+        (Join-Path $env:LOCALAPPDATA 'Android\Sdk')
+    ) | Where-Object { $_ }
+
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path -LiteralPath (Join-Path $Candidate 'platforms\android-36')) {
+            return (Resolve-Path -LiteralPath $Candidate).Path
+        }
+    }
+
+    throw 'Android SDK with platform android-36 was not found.'
+}
 
 function Read-SimpleProperties {
     param([Parameter(Mandatory)][string]$Path)
@@ -28,6 +47,22 @@ function Read-SimpleProperties {
         }
     }
     return $Properties
+}
+
+$PortCommit = (& git -C $RepositoryRoot rev-parse HEAD 2>$null | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $PortCommit) {
+    throw 'Unable to determine the repository commit for the release build.'
+}
+$DirtyEntries = @(& git -C $RepositoryRoot status --porcelain 2>$null)
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to inspect the release worktree.'
+}
+$DirtyWorktree = $DirtyEntries.Count -gt 0
+if ($DirtyWorktree -and -not $AllowDirtyWorktree) {
+    throw 'Refusing to build a release from a dirty worktree. Commit or stash the changes, or pass -AllowDirtyWorktree for a local-only test artifact.'
+}
+if ($DirtyWorktree) {
+    Write-Warning 'Building a local-only release artifact from a dirty worktree.'
 }
 
 if (-not (Test-Path -LiteralPath $SigningPropertiesPath)) {
@@ -81,13 +116,12 @@ $SafeVersionName = $VersionName -replace '[^0-9A-Za-z._-]', '_'
 $ReleaseApk = Join-Path $AndroidRoot "artifacts\Barony-Android-Port-$SafeVersionName-arm64-v8a.apk"
 Copy-Item -LiteralPath $BuiltApk -Destination $ReleaseApk -Force
 
-$AndroidSdk = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
-$BuildTools = Get-ChildItem -LiteralPath (Join-Path $AndroidSdk 'build-tools') -Directory |
-    Where-Object Name -Match '^\d+\.\d+\.\d+$' |
-    Sort-Object { [version]$_.Name } -Descending |
-    Select-Object -First 1
+$AndroidSdk = Find-AndroidSdk
+$BuildTools = Get-Item -LiteralPath (
+    Join-Path $AndroidSdk 'build-tools\36.0.0'
+) -ErrorAction SilentlyContinue
 if (-not $BuildTools) {
-    throw 'Android SDK build-tools were not found.'
+    throw "Pinned Android Build Tools 36.0.0 were not found under $AndroidSdk."
 }
 $ApkSigner = Join-Path $BuildTools.FullName 'apksigner.bat'
 if (-not (Test-Path -LiteralPath $ApkSigner)) {
@@ -213,19 +247,108 @@ Set-Content `
     -Value "$ArchiveBuilderHash  $([IO.Path]::GetFileName($ArchiveBuilderPath))" `
     -Encoding ASCII
 
-$PortCommit = (git -C $RepositoryRoot rev-parse HEAD).Trim()
-$Dirty = if (git -C $RepositoryRoot status --porcelain) { 'true' } else { 'false' }
+$JavaExecutable = if ($env:JAVA_HOME) {
+    Join-Path $env:JAVA_HOME 'bin\java.exe'
+}
+else {
+    $null
+}
+$JavaVersion = if ($JavaExecutable -and (Test-Path -LiteralPath $JavaExecutable)) {
+    ((& $JavaExecutable --version 2>&1 | Select-Object -First 1) -join '').Trim()
+}
+else {
+    '<unavailable>'
+}
+$WrapperPropertiesPath = Join-Path $AndroidRoot 'gradle\wrapper\gradle-wrapper.properties'
+$WrapperPropertiesText = Get-Content -LiteralPath $WrapperPropertiesPath -Raw
+$GradleVersion = if ($WrapperPropertiesText -match 'gradle-([0-9.]+)-bin\.zip') {
+    $Matches[1]
+}
+else {
+    '<unknown>'
+}
+$GradleChecksum = if ($WrapperPropertiesText -match 'distributionSha256Sum=([0-9a-fA-F]{64})') {
+    $Matches[1].ToLowerInvariant()
+}
+else {
+    '<unknown>'
+}
+$RootGradleText = Get-Content -LiteralPath (
+    Join-Path $AndroidRoot 'build.gradle.kts'
+) -Raw
+$AgpVersion = if ($RootGradleText -match 'com\.android\.application"\) version "([^"]+)"') {
+    $Matches[1]
+}
+else {
+    '<unknown>'
+}
+$AppGradleText = Get-Content -LiteralPath (
+    Join-Path $AndroidRoot 'app\build.gradle.kts'
+) -Raw
+$NdkVersion = if ($AppGradleText -match 'ndkVersion = "([^"]+)"') {
+    $Matches[1]
+}
+else {
+    '<unknown>'
+}
+$CmakeVersion = if ($AppGradleText -match '(?s)cmake\s*\{\s*path\s*=\s*file\("[^"]+"\)\s*version\s*=\s*"([0-9.]+)"') {
+    $Matches[1]
+}
+else {
+    '<unknown>'
+}
+$DependencyMetadata = [System.Collections.Generic.List[string]]::new()
+$PinnedDependencyPaths = @(
+    'external/SDL',
+    'external/SDL_image',
+    'external/SDL_image/external/libpng',
+    'external/SDL_image/external/zlib',
+    'external/SDL_net',
+    'external/SDL_ttf',
+    'external/SDL_ttf/external/freetype',
+    'external/physfs',
+    'external/rapidjson',
+    'external/openal-soft',
+    'external/ogg',
+    'external/vorbis'
+)
+foreach ($DependencyPath in $PinnedDependencyPaths) {
+    $AbsoluteDependencyPath = Join-Path $RepositoryRoot $DependencyPath
+    $Revision = (
+        & git -C $AbsoluteDependencyPath rev-parse HEAD 2>$null |
+            Out-String
+    ).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $Revision) {
+        throw "Unable to read release dependency revision: $DependencyPath"
+    }
+    $DependencyMetadata.Add("dependency.$DependencyPath=$Revision")
+}
+
 $BuildInfoPath = "$ReleaseApk.build.txt"
-$BuildInfo = @(
+$BuildInfo = [System.Collections.Generic.List[string]]::new()
+foreach ($Line in @(
     "artifact=$([IO.Path]::GetFileName($ReleaseApk))"
     "versionName=$VersionName"
     "versionCode=$VersionCode"
     'abi=arm64-v8a'
     "portCommit=$PortCommit"
-    "dirtyWorktree=$Dirty"
+    "dirtyWorktree=$($DirtyWorktree.ToString().ToLowerInvariant())"
     'baronySourceCommit=962a5ce36d10207beef7d8673876e0cebf8e76e4'
+    "toolchain.java=$JavaVersion"
+    "toolchain.gradle=$GradleVersion"
+    "toolchain.gradleDistributionSha256=$GradleChecksum"
+    "toolchain.androidGradlePlugin=$AgpVersion"
+    'toolchain.compileSdk=36'
+    'toolchain.buildTools=36.0.0'
+    "toolchain.ndk=$NdkVersion"
+    "toolchain.cmake=$CmakeVersion"
     "sha256=$Hash"
-)
+)) {
+    $BuildInfo.Add($Line)
+}
+foreach ($Line in $DependencyMetadata) {
+    $BuildInfo.Add($Line)
+}
 Set-Content -LiteralPath $BuildInfoPath -Value $BuildInfo -Encoding ASCII
 
 $Apk = Get-Item -LiteralPath $ReleaseApk

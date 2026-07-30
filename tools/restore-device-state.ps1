@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory)][string]$BackupPath,
     [string]$Serial,
-    [string]$ExpectedVersionName = '5.0.2-android-rc1',
+    [Parameter(Mandatory)][string]$ExpectedVersionName,
     [ValidateRange(10, 180)][int]$StartupTimeoutSeconds = 90
 )
 

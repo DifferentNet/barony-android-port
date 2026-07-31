@@ -838,8 +838,8 @@ void framebuffer::init(unsigned int _xsize, unsigned int _ysize, GLint minFilter
     // RGBA16F is texture-only in core GLES 3.0 and requires optional
     // color-buffer support to be renderable. Some mobile drivers advertise
     // that extension but corrupt large render targets under sustained load.
-    // Keep Android on the core color-renderable path; the fixed-exposure pass
-    // still preserves the intended presentation without framebuffer readback.
+    // Keep Android on the core color-renderable path. Adaptive exposure uses
+    // GPU mip reduction and reads back only the final 1x1 level.
     GL_CHECK_ERR(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
         xsize, ysize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
 #else
@@ -897,8 +897,8 @@ void framebuffer::init(unsigned int _xsize, unsigned int _ysize, GLint minFilter
 
 GLhalf* framebuffer::lock() {
 #ifdef ANDROID
-    // Android uses fixed exposure and never performs CPU/PBO framebuffer
-    // readback. Its framebuffer color storage is RGBA8, not half-float.
+    // Android performs a separate 1x1 asynchronous luminance readback. Its
+    // framebuffer color storage is RGBA8, not half-float.
     return nullptr;
 #else
     if (!fbo || mapped) {
@@ -948,6 +948,93 @@ void framebuffer::unlock() {
 #endif
 }
 
+#ifdef ANDROID
+bool framebuffer::sampleLuminance(float& luminance) {
+    if (!fbo || !fbo_color) {
+        return false;
+    }
+
+    GL_CHECK_ERR(glActiveTexture(GL_TEXTURE0));
+    GL_CHECK_ERR(glBindTexture(GL_TEXTURE_2D, fbo_color));
+    GL_CHECK_ERR(glGenerateMipmap(GL_TEXTURE_2D));
+
+    unsigned int largestDimension = std::max(xsize, ysize);
+    GLint mipLevel = 0;
+    while (largestDimension > 1) {
+        largestDimension >>= 1;
+        ++mipLevel;
+    }
+
+    if (!luminanceFbo) {
+        GL_CHECK_ERR(glGenFramebuffers(1, &luminanceFbo));
+    }
+    GL_CHECK_ERR(glBindFramebuffer(GL_READ_FRAMEBUFFER, luminanceFbo));
+    GL_CHECK_ERR(glFramebufferTexture2D(
+        GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+        fbo_color, mipLevel));
+    GL_CHECK_ERR(glReadBuffer(GL_COLOR_ATTACHMENT0));
+
+    const GLenum status = GL_CHECK_ERR_RET(
+        glCheckFramebufferStatus(GL_READ_FRAMEBUFFER));
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        static bool loggedIncomplete = false;
+        if (!loggedIncomplete) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                "BARONY_ANDROID_LUMINANCE_REDUCTION_INCOMPLETE status=0x%04x mip=%d",
+                status, mipLevel);
+            loggedIncomplete = true;
+        }
+        GL_CHECK_ERR(glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo));
+        return false;
+    }
+
+    static bool loggedReady = false;
+    if (!loggedReady) {
+        SDL_Log("BARONY_ANDROID_LUMINANCE_REDUCTION_READY source=%ux%u mip=%d sample=1x1 readback=async-pbo",
+            xsize, ysize, mipLevel);
+        loggedReady = true;
+    }
+
+    bool sampleReady = false;
+    const unsigned int readIndex =
+        (pboindex + NUM_PBOS - 1) % NUM_PBOS;
+    if (luminancePboReady[readIndex] && pbos[readIndex]) {
+        GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[readIndex]));
+        const auto* pixel = static_cast<const GLubyte*>(
+            GL_CHECK_ERR_RET(glMapBufferRange(
+                GL_PIXEL_PACK_BUFFER, 0, 4, GL_MAP_READ_BIT)));
+        if (pixel) {
+            constexpr float redWeight = 0.2126f;
+            constexpr float greenWeight = 0.7152f;
+            constexpr float blueWeight = 0.0722f;
+            luminance = (
+                pixel[0] * redWeight
+                + pixel[1] * greenWeight
+                + pixel[2] * blueWeight) / 255.f;
+            GL_CHECK_ERR(glUnmapBuffer(GL_PIXEL_PACK_BUFFER));
+            sampleReady = true;
+        }
+    }
+
+    if (!pbos[pboindex]) {
+        GL_CHECK_ERR(glGenBuffers(1, &pbos[pboindex]));
+        GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[pboindex]));
+        GL_CHECK_ERR(glBufferData(
+            GL_PIXEL_PACK_BUFFER, 4, nullptr, GL_STREAM_READ));
+    } else {
+        GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[pboindex]));
+    }
+    GL_CHECK_ERR(glReadPixels(
+        0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
+    luminancePboReady[pboindex] = true;
+    pboindex = (pboindex + 1) % NUM_PBOS;
+
+    GL_CHECK_ERR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
+    GL_CHECK_ERR(glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo));
+    return sampleReady;
+}
+#endif
+
 void framebuffer::destroy() {
 	if (mapped) {
 		GL_CHECK_ERR(glUnmapBuffer(GL_PIXEL_PACK_BUFFER));
@@ -957,6 +1044,12 @@ void framebuffer::destroy() {
         GL_CHECK_ERR(glDeleteFramebuffers(1, &fbo));
         fbo = 0;
     }
+#ifdef ANDROID
+    if (luminanceFbo) {
+        GL_CHECK_ERR(glDeleteFramebuffers(1, &luminanceFbo));
+        luminanceFbo = 0;
+    }
+#endif
     if (fbo_color) {
         GL_CHECK_ERR(glDeleteTextures(1, &fbo_color));
         fbo_color = 0;
@@ -974,7 +1067,11 @@ void framebuffer::destroy() {
             GL_CHECK_ERR(glDeleteBuffers(1, &pbos[c]));
             pbos[c] = 0;
         }
+#ifdef ANDROID
+        luminancePboReady[c] = false;
+#endif
     }
+    pboindex = 0;
 }
 
 static std::vector<framebuffer*> fbStack;

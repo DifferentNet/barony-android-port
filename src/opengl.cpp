@@ -1264,18 +1264,40 @@ void glEndCamera(view_t* camera, bool useHDR, map_t& map)
         if (hdr) {
         // calculate luminance
 #ifdef ANDROID
-        // Full-resolution half-float framebuffer readback is prohibitively
-        // expensive on tile-based mobile GPUs and is a suspected trigger for
-        // corrupted render tiles on some Adreno drivers. Preserve the HDR
-        // tone-mapping pass with the initial desktop exposure, but do not map
-        // or read back the framebuffer on Android.
-        camera->luminance = defaultLuminance;
+        // Full-resolution half-float readback is prohibitively expensive on
+        // tile-based mobile GPUs and can corrupt large render targets on some
+        // drivers. Reduce the core RGBA8 target to 1x1 on the GPU and read only
+        // that final pixel through a double-buffered PBO.
+        constexpr unsigned int sampleInterval = 8;
+        bool sampledThisFrame = false;
+        float sampledLuminance = defaultLuminance;
+        if ((camera->drawnFrames % sampleInterval) == 0) {
+            if (camera->fb[fbIndex].sampleLuminance(sampledLuminance)) {
+                sampledThisFrame = true;
+                const float rate =
+                    hdr_adjustment_rate * sampleInterval / fpsLimit;
+                if (camera->luminance > sampledLuminance) {
+                    camera->luminance -= std::min(
+                        rate, camera->luminance - sampledLuminance);
+                } else if (camera->luminance < sampledLuminance) {
+                    camera->luminance += std::min(
+                        rate, sampledLuminance - camera->luminance);
+                }
+            }
+        }
         const float exposure = std::min(std::max(
-            hdr_limit_low, hdr_exposure / defaultLuminance), hdr_limit_high);
+            hdr_limit_low, hdr_exposure / camera->luminance), hdr_limit_high);
+        static unsigned int loggedAndroidAdaptationSamples = 0;
+        if (sampledThisFrame && loggedAndroidAdaptationSamples < 8) {
+            SDL_Log("BARONY_ANDROID_HDR_ADAPTATION sample=%u target_luminance=%.3f luminance=%.3f exposure=%.3f",
+                loggedAndroidAdaptationSamples + 1, sampledLuminance,
+                camera->luminance, exposure);
+            ++loggedAndroidAdaptationSamples;
+        }
         static bool loggedAndroidHdrMode = false;
         if (!loggedAndroidHdrMode) {
-            SDL_Log("BARONY_ANDROID_HDR_MODE mode=fixed-exposure readback=disabled color=RGBA8 luminance=%.3f exposure=%.3f",
-                defaultLuminance, exposure);
+            SDL_Log("BARONY_ANDROID_HDR_MODE mode=gpu-adaptive reduction=mipmap readback=1x1-async-pbo color=RGBA8 luminance=%.3f exposure=%.3f",
+                camera->luminance, exposure);
             loggedAndroidHdrMode = true;
         }
 #else

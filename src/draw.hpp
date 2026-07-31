@@ -209,9 +209,13 @@ struct framebuffer {
     unsigned int ysize = 720;
     
     static constexpr int NUM_PBOS = 2;
-    unsigned int pbos[NUM_PBOS];
+    unsigned int pbos[NUM_PBOS] = {};
     unsigned int pboindex = 0;
     bool mapped = false;
+#ifdef ANDROID
+    unsigned int luminanceFbo = 0;
+    bool luminancePboReady[NUM_PBOS] = {};
+#endif
 
     void init(unsigned int _xsize, unsigned int _ysize, GLint minFilter, GLint magFilter);
     void destroy();
@@ -220,6 +224,9 @@ struct framebuffer {
     
     GLhalf* lock();
     void unlock();
+#ifdef ANDROID
+    bool sampleLuminance(float& luminance);
+#endif
     
     void draw(float brightness = 1.f);
     void hdrDraw(const Vector4& brightness, float gamma, float exposure);

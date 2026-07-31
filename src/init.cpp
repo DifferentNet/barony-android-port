@@ -495,7 +495,7 @@ int initApp(char const * const title, int fullscreen)
         maxRenderbufferSize,
         maxViewportDimensions[0],
         maxViewportDimensions[1]);
-    SDL_Log("BARONY_ANDROID_FRAMEBUFFER_POLICY color=RGBA8 depth=DEPTH24_STENCIL8_RENDERBUFFER hdrReadback=disabled mainFramebuffer=lazy");
+    SDL_Log("BARONY_ANDROID_FRAMEBUFFER_POLICY color=RGBA8 depth=DEPTH24_STENCIL8_RENDERBUFFER hdrReadback=1x1-async-pbo mainFramebuffer=lazy");
 #endif
 #endif
 

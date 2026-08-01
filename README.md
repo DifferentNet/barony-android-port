@@ -1,8 +1,13 @@
 # Barony Android Port
 
 [![Android CI](https://github.com/DifferentNet/barony-android-port/actions/workflows/android-ci.yml/badge.svg)](https://github.com/DifferentNet/barony-android-port/actions/workflows/android-ci.yml)
+[![Upstream: TurningWheel/Barony](https://img.shields.io/badge/upstream-TurningWheel%2FBarony-181717?logo=github)](https://github.com/TurningWheel/Barony)
 
-This repository contains a community-maintained native Android port of Barony by Victor Jdanov. It is published with permission from Turning Wheel LLC and is based on the official Barony v5.0.2 source at commit `962a5ce36d10207beef7d8673876e0cebf8e76e4`.
+This repository is an Android-focused source fork of
+[TurningWheel/Barony](https://github.com/TurningWheel/Barony), maintained by
+Victor Jdanov. It is published with permission from Turning Wheel LLC and is
+based on the official Barony v5.0.2 source at
+[commit `962a5ce36d10207beef7d8673876e0cebf8e76e4`](https://github.com/TurningWheel/Barony/commit/962a5ce36d10207beef7d8673876e0cebf8e76e4).
 
 The Android package contains engine code and open-source dependency notices only. It does not contain Barony maps, models, music, sounds, DLC, or other commercial game data. A purchased Barony v5.0.2 PC installation is required.
 

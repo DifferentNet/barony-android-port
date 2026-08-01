@@ -26,6 +26,11 @@ alternatives, controls, save backups, limitations, and source-build
 instructions. Releases also include checksums and an ADB data installer for
 advanced fallback use.
 
+## Gameplay video
+
+Watch [Beta 7 gameplay on real Android hardware](https://youtu.be/J8Br5tbCRcI),
+including touch controls and physical-controller support.
+
 ## Current Android support
 
 - Native `arm64-v8a` build for Android 8.0 and newer.

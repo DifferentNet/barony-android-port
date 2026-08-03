@@ -13317,12 +13317,19 @@ bind_failed:
 		    // open sockets
 		    printlog("opening UDP socket...\n");
 		    if (!(net_sock = SDLNet_UDP_Open(NETWORK_PORT_CLIENT))) {
+#ifdef ANDROID
+				SDL_Log("BARONY_ANDROID_LAN_CLIENT_SOCKET_FAILED serverPort=%hu error=%s",
+					port, SDLNet_GetError());
+#endif
 			    char buf[1024];
 			    snprintf(buf, sizeof(buf), "%s", Language::get(5346));
 				systemErrorPrompt(buf);
 				printlog(buf);
 				goto failed;
 		    }
+#ifdef ANDROID
+			SDL_Log("BARONY_ANDROID_LAN_CLIENT_SOCKET_READY serverPort=%hu", port);
+#endif
 
 		    printlog("successfully contacted server at %s.\n", address);
 		    sendJoinRequest();
@@ -21469,11 +21476,27 @@ failed:
         // open a socket for network scanning
         scan.close();
 	    scan.sock = SDLNet_UDP_Open(NETWORK_SCAN_PORT_CLIENT);
-	    assert(scan.sock);
+		if (!scan.sock) {
+#ifdef ANDROID
+			SDL_Log("BARONY_ANDROID_LAN_SCAN_SOCKET_FAILED error=%s", SDLNet_GetError());
+#endif
+			systemErrorPrompt(Language::get(5346));
+			return;
+		}
+#ifdef ANDROID
+		SDL_Log("BARONY_ANDROID_LAN_SCAN_SOCKET_READY");
+#endif
 
         // allocate packet data for scanning
         scan.packet = SDLNet_AllocPacket(NET_PACKET_SIZE);
-        assert(scan.packet);
+		if (!scan.packet) {
+#ifdef ANDROID
+			SDL_Log("BARONY_ANDROID_LAN_SCAN_PACKET_FAILED error=%s", SDLNet_GetError());
+#endif
+			scan.close();
+			systemErrorPrompt(Language::get(5346));
+			return;
+		}
 #endif
 
 		// remove "Local or Network" window
@@ -23533,11 +23556,18 @@ failed:
 
 		// open socket
 		if (!(net_sock = SDLNet_UDP_Open(port))) {
+#ifdef ANDROID
+			SDL_Log("BARONY_ANDROID_LAN_HOST_SOCKET_FAILED port=%hu error=%s",
+				port, SDLNet_GetError());
+#endif
 			char buf[1024];
 			snprintf(buf, sizeof(buf), Language::get(5570), port);
 			errorPrompt(buf, Language::get(5558), [](Button&){soundCancel(); closeMono();});
 			return;
 		}
+#ifdef ANDROID
+		SDL_Log("BARONY_ANDROID_LAN_HOST_SOCKET_READY port=%hu", port);
+#endif
 
 		// create lobby
 		createLobby(LobbyType::LobbyLAN);

@@ -32,7 +32,7 @@ body:
     attributes:
       label: Android port build
       description: Use the version shown by Android or the release filename.
-      placeholder: 5.0.2-android-beta7
+      placeholder: 5.0.2-android-beta8
     validations:
       required: true
 

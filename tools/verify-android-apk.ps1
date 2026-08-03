@@ -72,9 +72,20 @@ if ($Badging -notmatch "sdkVersion:'26'") {
 if ($Badging -notmatch "targetSdkVersion:'36'") {
     throw 'APK target SDK is not 36.'
 }
-if ($Badging -match '(?m)^uses-permission(?:-sdk-\d+)?:') {
-    throw 'APK unexpectedly requests one or more Android permissions.'
+$RequestedPermissions = @(
+    [Regex]::Matches(
+        $Badging,
+        "(?m)^uses-permission(?:-sdk-\d+)?: name='([^']+)'"
+    ) | ForEach-Object { $_.Groups[1].Value }
+)
+$ExpectedPermissions = [string[]]@()
+if ($Variant -eq 'Game') {
+    $ExpectedPermissions = @('android.permission.INTERNET')
 }
+Assert-ExactSet `
+    -Label 'Android permission set' `
+    -Actual $RequestedPermissions `
+    -Expected $ExpectedPermissions
 
 Add-Type -AssemblyName System.IO.Compression
 $Stream = [IO.File]::OpenRead($ApkPath)

@@ -151,8 +151,20 @@ if ($Badging -notmatch "sdkVersion:'26'" -or $Badging -notmatch "targetSdkVersio
 if ($Badging -notmatch "native-code: 'arm64-v8a'") {
     throw 'Release APK does not declare arm64-v8a as its native ABI.'
 }
-if ($Badging -match '(?m)^uses-permission:') {
-    throw 'Release APK unexpectedly requests Android permissions.'
+$RequestedPermissions = @(
+    [Regex]::Matches(
+        $Badging,
+        "(?m)^uses-permission(?:-sdk-\d+)?: name='([^']+)'"
+    ) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+)
+if ($RequestedPermissions.Count -ne 1 -or $RequestedPermissions[0] -ne 'android.permission.INTERNET') {
+    $PermissionText = if ($RequestedPermissions.Count) {
+        $RequestedPermissions -join ', '
+    }
+    else {
+        '<none>'
+    }
+    throw "Release APK permission set mismatch. Expected only android.permission.INTERNET. Actual: $PermissionText."
 }
 if ($Badging -match '(?m)^application-debuggable') {
     throw 'Release APK is unexpectedly debuggable.'
@@ -357,4 +369,4 @@ Write-Host "SHA-256: $Hash"
 Write-Host "Build metadata: $BuildInfoPath"
 Write-Host "Data installer: $DataInstallerPath"
 Write-Host "Data archive builder: $ArchiveBuilderPath"
-Write-Host 'Verified: package/version/SDK metadata, non-debuggable and zero-permission manifest, release signature, exact ARM64 native-library set, notice-only assets, and no commercial data paths.'
+Write-Host 'Verified: package/version/SDK metadata, non-debuggable manifest with only android.permission.INTERNET, release signature, exact ARM64 native-library set, notice-only assets, and no commercial data paths.'

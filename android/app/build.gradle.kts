@@ -22,6 +22,8 @@ val baronyVersionCode = providers.gradleProperty("baronyVersionCode")
 val baronyVersionName = providers.gradleProperty("baronyVersionName")
     .orElse("0.0.1-bootstrap")
     .get()
+val baseAndroidManifest = file("src/main/AndroidManifest.xml")
+val generatedBaronyManifest = layout.buildDirectory.file("generated/baronyManifest/AndroidManifest.xml")
 val baronyNoticeAssets = layout.buildDirectory.dir("generated/baronyNotices/assets")
 val sdlJavaSource = rootProject.file("../external/SDL/android-project/app/src/main/java")
 val generatedSdlJava = layout.buildDirectory.dir("generated/sdlJava")
@@ -89,6 +91,29 @@ val generateSdlJava by tasks.registering(Sync::class) {
                         "        }"
                 )
         )
+    }
+}
+
+val generateBaronyManifest by tasks.registering {
+    inputs.file(baseAndroidManifest)
+    inputs.property("baronyBuildGame", baronyBuildGame)
+    outputs.file(generatedBaronyManifest)
+
+    doLast {
+        val marker = "    <!-- BARONY_GAME_PERMISSIONS -->"
+        val source = baseAndroidManifest.readText()
+        require(source.contains(marker)) {
+            "Android manifest permission marker is missing"
+        }
+        val permission = if (baronyBuildGame) {
+            "    <uses-permission android:name=\"android.permission.INTERNET\" />"
+        }
+        else {
+            marker
+        }
+        val output = generatedBaronyManifest.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(source.replace(marker, permission))
     }
 }
 
@@ -165,6 +190,7 @@ android {
 
     sourceSets {
         getByName("main") {
+            manifest.srcFile(generatedBaronyManifest)
             java.srcDir(generatedSdlJava)
             if (baronyBuildGame) {
                 assets.srcDir(baronyNoticeAssets)
@@ -175,6 +201,7 @@ android {
 
 tasks.named("preBuild") {
     dependsOn(generateSdlJava)
+    dependsOn(generateBaronyManifest)
 }
 
 if (baronyBuildGame) {

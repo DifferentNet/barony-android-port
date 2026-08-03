@@ -10,7 +10,7 @@ The APK is code-only. It does not contain the commercial Barony game data, so ev
 - 64-bit ARM device (`arm64-v8a`).
 - OpenGL ES 3.0 or newer.
 - Landscape orientation.
-- Offline single-player.
+- Offline single-player and experimental direct LAN multiplayer.
 - Physical gamepad, mouse and keyboard, or on-screen touch controls.
 
 The port has been tested on a Samsung Galaxy S24 Ultra / Adreno 750 with a
@@ -33,7 +33,7 @@ release notes describe your device or problem.
 Verify the APK before installing it:
 
 ```powershell
-$apk = '.\Barony-Android-Port-5.0.2-android-beta7-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta8-arm64-v8a.apk'
 (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
 Get-Content "$apk.sha256"
 ```
@@ -149,7 +149,7 @@ You can also install or update the APK through ADB:
 
 ```powershell
 $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
-$apk = '.\Barony-Android-Port-5.0.2-android-beta7-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta8-arm64-v8a.apk'
 & $adb devices
 & $adb install -r $apk
 ```
@@ -169,9 +169,10 @@ To enable owned DLC, download the Beta 5 archive builder, create a new
 owned-data ZIP, and import it through **Data & Saves**. Archives created with
 the Beta 4 builder do not contain the DLC entitlement transfer file.
 
-Beta 7 can be installed directly over Beta 5, Beta 6, or the adaptive-HDR test
-build. Existing owned data, DLC entitlements, saves, and settings remain
-compatible, so the archive does not need to be rebuilt for this update.
+Beta 8 can be installed directly over Beta 5, Beta 6, Beta 7, or the
+adaptive-HDR test build. Existing owned data, DLC entitlements, saves, and
+settings remain compatible, so the archive does not need to be rebuilt for
+this update.
 
 From the root Barony main menu, select **Data & Saves**:
 
@@ -197,6 +198,22 @@ Without a gamepad, the port selects one of three touch layouts automatically:
 - **Inventory/UI:** centered navigation controls with direct inventory and interface tapping.
 
 Mouse and keyboard input are also supported through Android.
+
+## Experimental LAN multiplayer
+
+Beta 8 enables Barony's direct LAN host and lobby-browser paths on Android.
+Put the devices on the same local network, host a multiplayer game on one
+device, then open the lobby browser on the other device and join the discovered
+lobby. Direct IPv4 joining is also available when network discovery is blocked.
+
+The host listens on Barony's default UDP port `57165`. Guest/client isolation,
+VPNs, mobile hotspots, and router firewall rules can prevent discovery or
+joining even when both devices have Internet access. LAN play does not use
+Steamworks, EOS, PlayFab, or an Internet matchmaking service.
+
+The full-game APK requests `android.permission.INTERNET`, Android's networking
+permission, for this direct LAN traffic. It continues to request no storage,
+account, microphone, location, or other permissions.
 
 ## Graphics and performance
 
@@ -226,16 +243,16 @@ configuration, credentials, or other private commercial data to an issue.
 
 ## Current limitations
 
-- Offline single-player is the tested mode.
-- Steamworks, EOS, PlayFab, achievements, workshop integration, and voice chat are disabled.
+- Offline single-player remains the most broadly tested mode; direct LAN
+  multiplayer is experimental.
+- Internet matchmaking, Steamworks, EOS, PlayFab, achievements, workshop
+  integration, and voice chat are disabled.
 - Controller glyph selection has not been verified across a broad range of controller models.
 - Steam DLC entitlement transfer depends on a locally cached Steam app ticket;
   launch the PC version once before rebuilding the data archive if an owned pack
   is not detected.
-- HDR tone mapping uses fixed exposure on Android. Adaptive eye adjustment is
-  disabled because the desktop implementation reads a full-resolution
-  half-float framebuffer back to the CPU every frame, which is unsuitable for
-  tile-based mobile GPUs.
+- HDR tone mapping uses a mobile adaptive-exposure path with GPU mip reduction
+  and asynchronous 1x1 readback.
 - Creating a validated owned-data archive currently requires Windows and
   PowerShell. Importing it on Android does not require ADB.
 - Touch layout customization, haptics, and left-handed presets are not implemented.
@@ -296,9 +313,11 @@ The `Android CI` workflow runs on pushes and pull requests targeting `main`, and
 can also be started manually. It verifies all pinned Android dependency
 revisions and the Gradle wrapper checksum, then builds clean smoke and full
 ARM64 debug APKs. Both APKs are checked for their package/SDK metadata, exact
-native-library set, permission-free manifest, allowed notice assets, and absence
-of commercial game data. Successful runs retain debug-signed, non-release APKs
-as temporary workflow artifacts for 14 days; these are not public releases.
+native-library set, strict permission boundary, allowed notice assets, and
+absence of commercial game data. The smoke APK requests no permissions; the
+full-game APK requests only `android.permission.INTERNET` for direct LAN play.
+Successful runs retain debug-signed, non-release APKs as temporary workflow
+artifacts for 14 days; these are not public releases.
 
 Create a validated owned-data archive directly from a source checkout:
 
@@ -350,7 +369,7 @@ Back up the generated keystore and password securely. Losing the signing key pre
 Build and verify a signed release:
 
 ```powershell
-.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-next -VersionCode 15000220
+.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-beta8 -VersionCode 15000222
 ```
 
 Use a unique version name and a version code greater than every previously
@@ -363,7 +382,7 @@ before using the default per-user Android SDK.
 The release script verifies:
 
 - the APK signature, package identity, version, and SDK levels;
-- a non-debuggable manifest with no requested Android permissions;
+- a non-debuggable manifest requesting only `android.permission.INTERNET`;
 - the exact ARM64 native-library set;
 - all required open-source notices;
 - the absence of commercial game-data paths and unexpected APK assets.

@@ -348,13 +348,34 @@ Use the performance profile for a timed renderer sample:
     -ExpectedFrameRate 60
 ```
 
+For a long Galaxy A36 memory regression, keep the device at 720p / 60 FPS and
+sample the process once per minute across dungeon transitions:
+
+```powershell
+.\tools\test-device.ps1 `
+    -SkipInstall `
+    -Profile Gameplay `
+    -DurationMinutes 45 `
+    -MemorySampleIntervalSeconds 60 `
+    -ExpectedRenderPreset 720p `
+    -ExpectedFrameRate 60
+```
+
 The harness captures Logcat and required port markers, a screenshot, memory and
 Android UI frame statistics, native SurfaceFlinger presentation timing, display
 mode/refresh information, battery state, and thermal readings. It fails on
 missing startup/renderer/input/DLC diagnostics, an unexpected render policy,
 incomplete framebuffers, named shader or GL failures, crashes, ANRs, or native
-process death. Keep the device awake and unlocked, and use `-Serial` when more
-than one ADB target is connected.
+process death. Timed Gameplay and Performance runs also write raw
+`meminfo-series.txt` snapshots and parsed `memory-series.csv` trends. A positive
+memory trend is diagnostic and does not fail the run by itself. If the monitored
+process exits or changes PID, the harness stops the timed phase and immediately
+writes `crash-logcat.txt` before completing the remaining safe captures.
+
+Keep the device awake and unlocked, and use `-Serial` when more than one ADB
+target is connected. For a public OOM report, attach only
+`meminfo-series.txt` and `crash-logcat.txt` when present. Never attach owned game
+data, save archives, DLC entitlement files, Steam configuration, or credentials.
 
 ## Signed release builds
 

@@ -13,10 +13,12 @@ The APK is code-only. It does not contain the commercial Barony game data, so ev
 - Offline single-player and experimental direct LAN multiplayer.
 - Physical gamepad, mouse and keyboard, or on-screen touch controls.
 
-The port has been tested on a Samsung Galaxy S24 Ultra / Adreno 750 with a
-GameSir G8 controller. Affected-device testers also confirmed the mobile
-framebuffer compatibility path on a Galaxy Note 9 / Mali-G72 and a
-Poco F7 / Adreno 825.
+Beta 8 and earlier were tested on a Samsung Galaxy S24 Ultra / Adreno 750
+with a GameSir G8 controller. Affected-device testers also confirmed the
+mobile framebuffer compatibility path on a Galaxy Note 9 / Mali-G72 and a
+Poco F7 / Adreno 825. Beta 9 and Beta 10 were verified on an Android 15
+emulator, including the ARM64 build under ARM translation, so reports from
+physical devices are especially welcome.
 
 ## Install a release
 
@@ -300,8 +302,9 @@ and include the device model, GPU, Android version, port build, owned-data
 version, selected render/FPS preset, and exact reproduction steps. Recent
 `BARONY_ANDROID_*` log markers are useful when available.
 
-Never attach owned game-data archives, DLC entitlement files, Steam
-configuration, credentials, or other private commercial data to an issue.
+Never attach owned game-data archives, mod archives, DLC entitlement files,
+Steam configuration, credentials, or other private commercial data to an
+issue.
 
 ## Current limitations
 
@@ -319,6 +322,9 @@ configuration, credentials, or other private commercial data to an issue.
 - Creating a validated owned-data archive currently requires Windows and
   PowerShell. Importing it on Android does not require ADB.
 - Touch layout customization, haptics, and left-handed presets are not implemented.
+- Barony reads some mod data files into fixed-size buffers, so a mod with an
+  unusually large data file may load only partly. Barony logs a JSON error
+  and skips that file, as on desktop.
 
 ## Build from source
 
@@ -389,8 +395,11 @@ Create a validated owned-data archive directly from a source checkout:
 ```
 
 Pass `-SourcePath` for a non-default Steam/GOG installation and `-OutputPath`
-to choose the ZIP destination. Generated owned-data archives are private user
-artifacts and must never be committed or attached to a public release.
+to choose the ZIP destination. Add `-IncludeHolidayThemes` to include the
+optional seasonal themes. `-Mods` builds a mod archive instead (see
+[Mods and translations](#mods-and-translations)). Generated owned-data and mod
+archives are private user artifacts and must never be committed or attached
+to a public release.
 
 ## Physical-device regression
 

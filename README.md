@@ -44,7 +44,8 @@ including touch controls and physical-controller support.
 - Native `arm64-v8a` build for Android 8.0 and newer.
 - OpenGL ES 3 rendering.
 - Offline single-player gameplay and experimental direct LAN multiplayer.
-- Physical gamepads and automatic on-screen touch controls.
+- Physical gamepads, Bluetooth or USB keyboard and mouse, and automatic
+  on-screen touch controls.
 - 720p, 1080p, and native 3D render-resolution presets with native-resolution
   menus and text.
 - 60, 90, and 120 FPS limits.
@@ -54,6 +55,7 @@ including touch controls and physical-controller support.
 - Owned DLC entitlement transfer from Steam cached app tickets or GOG/DRM-free
   license keys.
 - Portable save/settings export and import from the main menu.
+- Optional Halloween and winter-holiday themes.
 - Mods and translations through Barony's mod menu, installed from Steam
   Workshop subscriptions or mod ZIPs via **Data & Saves**
   ([mods guide](MODS.md)).

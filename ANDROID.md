@@ -203,9 +203,14 @@ Without a gamepad, the port selects one of three touch layouts automatically:
 
 - **Menu:** D-pad and compact face/shoulder buttons, with direct menu tapping.
 - **Gameplay:** floating movement and camera zones plus nearby action controls.
-- **Inventory/UI:** centered navigation controls with direct inventory and interface tapping.
+- **Inventory/UI:** centered navigation controls with direct inventory and
+  interface tapping. **LT** opens the spell list and **RT** opens the skill
+  sheet.
 
-Mouse and keyboard input are also supported through Android.
+Mouse and keyboard input are also supported through Android. Connecting both an
+external keyboard and an external mouse (for example over Bluetooth) hides the
+touch overlay, just like a gamepad; disconnecting either one restores it. Mouse
+clicks always go to the game, never to on-screen buttons.
 
 ## Experimental LAN multiplayer
 

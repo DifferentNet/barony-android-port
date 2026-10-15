@@ -61,6 +61,10 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
     private static final int SHAPE_CIRCLE = 0;
     private static final int SHAPE_PILL = 1;
 
+    private static final int PHYSICAL_INPUT_NONE = 0;
+    private static final int PHYSICAL_INPUT_GAMEPAD = 1;
+    private static final int PHYSICAL_INPUT_KEYBOARD_MOUSE = 2;
+
     private final InputManager inputManager;
     private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -76,7 +80,7 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
 
     private boolean controllerRegistered;
     private boolean destroyed;
-    private boolean physicalControllerPresent;
+    private int physicalInput = PHYSICAL_INPUT_NONE;
     private boolean inputModeInitialized;
     private boolean floatingMoveEnabled;
     private boolean floatingLookEnabled;
@@ -168,8 +172,9 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
         if (destroyed) {
             return;
         }
-        boolean hasPhysicalController = hasPhysicalController();
-        if (hasPhysicalController) {
+        int detectedInput = detectPhysicalInput();
+        boolean hideOverlay = detectedInput != PHYSICAL_INPUT_NONE;
+        if (hideOverlay) {
             releaseAllControls();
             unregisterVirtualController();
             setVisibility(GONE);
@@ -178,24 +183,40 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
             setVisibility(controllerRegistered ? VISIBLE : GONE);
         }
 
-        if (!inputModeInitialized || physicalControllerPresent != hasPhysicalController) {
-            physicalControllerPresent = hasPhysicalController;
+        if (!inputModeInitialized || physicalInput != detectedInput) {
+            physicalInput = detectedInput;
             inputModeInitialized = true;
-            Log.i(TAG, hasPhysicalController
-                    ? "BARONY_ANDROID_TOUCH_HIDDEN_FOR_GAMEPAD"
-                    : "BARONY_ANDROID_TOUCH_SHOWN");
+            String state;
+            if (detectedInput == PHYSICAL_INPUT_GAMEPAD) {
+                state = "BARONY_ANDROID_TOUCH_HIDDEN_FOR_GAMEPAD";
+            } else if (detectedInput == PHYSICAL_INPUT_KEYBOARD_MOUSE) {
+                state = "BARONY_ANDROID_TOUCH_HIDDEN_FOR_KEYBOARD_MOUSE";
+            } else {
+                state = "BARONY_ANDROID_TOUCH_SHOWN";
+            }
+            Log.i(TAG, state);
             Log.i(TAG, "BARONY_ANDROID_TOUCH_VISIBILITY visible="
-                    + ((!hasPhysicalController && controllerRegistered) ? 1 : 0)
-                    + " physicalController=" + (hasPhysicalController ? 1 : 0)
+                    + ((!hideOverlay && controllerRegistered) ? 1 : 0)
+                    + " physicalController="
+                    + (detectedInput == PHYSICAL_INPUT_GAMEPAD ? 1 : 0)
+                    + " keyboardMouse="
+                    + (detectedInput == PHYSICAL_INPUT_KEYBOARD_MOUSE ? 1 : 0)
                     + " virtualController=" + (controllerRegistered ? 1 : 0));
         }
     }
 
-    private boolean hasPhysicalController() {
+    /**
+     * A connected gamepad, or an external keyboard together with an external
+     * mouse, replaces the touch overlay. A keyboard or mouse alone keeps it,
+     * because neither can play Barony by itself.
+     */
+    private int detectPhysicalInput() {
         if (inputManager == null) {
-            return false;
+            return PHYSICAL_INPUT_NONE;
         }
         boolean physicalControllerFound = false;
+        boolean externalKeyboardFound = false;
+        boolean externalMouseFound = false;
         int candidateCount = 0;
         StringBuilder deviceSummary = new StringBuilder();
         for (int deviceId : InputDevice.getDeviceIds()) {
@@ -204,6 +225,28 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
                 continue;
             }
             int sources = device.getSources();
+            boolean deviceEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1
+                    || device.isEnabled();
+            boolean deviceExternal = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                    || device.isExternal();
+            boolean deviceUsable = !device.isVirtual() && deviceEnabled && deviceExternal;
+
+            boolean keyboard = (sources & InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD
+                    && device.getKeyboardType() == InputDevice.KEYBOARD_TYPE_ALPHABETIC;
+            boolean mouse = (sources & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE;
+            if (deviceUsable && (keyboard || mouse)) {
+                externalKeyboardFound |= keyboard;
+                externalMouseFound |= mouse;
+                if (deviceSummary.length() > 0) {
+                    deviceSummary.append(';');
+                }
+                deviceSummary.append("id=").append(deviceId)
+                        .append(",name=").append(sanitizeDeviceName(device.getName()))
+                        .append(",sources=0x").append(Integer.toHexString(sources))
+                        .append(",keyboard=").append(keyboard ? 1 : 0)
+                        .append(",mouse=").append(mouse ? 1 : 0);
+            }
+
             boolean gamepad = (sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD;
             boolean joystick = (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK;
             if (!gamepad && !joystick) {
@@ -236,13 +279,7 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
                 }
             }
 
-            boolean deviceEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1
-                    || device.isEnabled();
-            boolean deviceExternal = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-                    || device.isExternal();
-            boolean accepted = !device.isVirtual()
-                    && deviceEnabled
-                    && deviceExternal
+            boolean accepted = deviceUsable
                     && supportedButtonCount > 0
                     && (gamepad || joystickAxisCount >= 2);
             if (accepted) {
@@ -267,12 +304,19 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
 
         String summary = "accepted=" + (physicalControllerFound ? 1 : 0)
                 + " candidates=" + candidateCount
+                + " keyboard=" + (externalKeyboardFound ? 1 : 0)
+                + " mouse=" + (externalMouseFound ? 1 : 0)
                 + " devices=" + (deviceSummary.length() > 0 ? deviceSummary : "none");
         if (!summary.equals(lastInputDeviceSummary)) {
             lastInputDeviceSummary = summary;
             Log.i(TAG, "BARONY_ANDROID_INPUT_DEVICE_SCAN " + summary);
         }
-        return physicalControllerFound;
+        if (physicalControllerFound) {
+            return PHYSICAL_INPUT_GAMEPAD;
+        }
+        return externalKeyboardFound && externalMouseFound
+                ? PHYSICAL_INPUT_KEYBOARD_MOUSE
+                : PHYSICAL_INPUT_NONE;
     }
 
     private static String sanitizeDeviceName(String name) {
@@ -404,6 +448,13 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
                 KeyEvent.KEYCODE_BUTTON_START);
         addKeyPill("RB", left + width * 0.68f, top + height * 0.10f, pillRadius,
                 KeyEvent.KEYCODE_BUTTON_R1);
+        // The triggers switch the inventory to the spell list (LT) and the
+        // skill sheet (RT). They sit inward of the bumpers so the item tooltip
+        // beside the inventory grid stays clear.
+        addAxisPill("LT", left + width * 0.38f, top + height * 0.25f, pillRadius,
+                AXIS_LEFT_TRIGGER);
+        addAxisPill("RT", left + width * 0.62f, top + height * 0.25f, pillRadius,
+                AXIS_RIGHT_TRIGGER);
     }
 
     private void buildGameplayLayout(float left, float top, float width, float height,
@@ -574,6 +625,10 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
         }
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                // Mouse clicks always belong to Barony's own cursor input.
+                if (event.getToolType(event.getActionIndex()) == MotionEvent.TOOL_TYPE_MOUSE) {
+                    return false;
+                }
                 // Declining an unmatched initial pointer lets SDL's view below
                 // this overlay receive Barony's existing finger UI events.
                 return handlePointerDown(event, event.getActionIndex());

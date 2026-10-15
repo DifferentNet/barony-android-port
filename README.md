@@ -11,6 +11,8 @@ based on the official Barony v5.0.2 source at
 
 The Android package contains engine code and open-source dependency notices only. It does not contain Barony maps, models, music, sounds, DLC, or other commercial game data. A purchased Barony v5.0.2 PC installation is required.
 
+**New to the port? Follow the step-by-step [Getting started guide](GETTING-STARTED.md).**
+
 Download the APK and owned-data archive builder from the
 [GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
 The current normal prerelease is

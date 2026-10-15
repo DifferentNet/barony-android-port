@@ -20,6 +20,10 @@ Poco F7 / Adreno 825.
 
 ## Install a release
 
+For a short, beginner-friendly walkthrough, see
+[GETTING-STARTED.md](GETTING-STARTED.md). This section covers the same steps
+in more detail.
+
 You need:
 
 - the APK and matching `.sha256` file from the GitHub release;

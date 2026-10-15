@@ -79,23 +79,10 @@ If the game runs slowly, open **Settings** and lower **Render Resolution** to
 
 ## Mods and translations (optional)
 
-1. On the PC, subscribe to the mods you want in Barony's **Steam Workshop**.
-   Translations are mods too.
-2. In your **Downloads** folder, run the builder again with `-Mods`:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\Barony-Android-Data-Archive-Builder-5.0.2.ps1 -Mods
-   ```
-
-   This creates **`Barony-Android-Mods.zip`**.
-3. Copy it to the phone. On Barony's main menu, open **Data & Saves** >
-   **Import mods** and choose the ZIP. Tap **Exit now**, then open the game
-   again.
-4. Choose **Play Modded Game**, tap **Load Mod** next to each mod you want, and
-   then **Start Modded Game**.
-
-A mod you downloaded as a ZIP from elsewhere can be imported directly in
-step 3. To uninstall mods, use **Data & Saves** > **Remove mods**.
+Steam Workshop mods, downloaded mods, and community translations all work.
+In short: run the builder with `-Mods` on the PC, import the ZIP from
+**Data & Saves** > **Import mods**, then load the mods in **Play Modded Game**.
+Follow the step-by-step [mods guide](MODS.md).
 
 ## Updating to a new version
 

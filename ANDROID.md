@@ -37,7 +37,7 @@ release notes describe your device or problem.
 Verify the APK before installing it:
 
 ```powershell
-$apk = '.\Barony-Android-Port-5.0.2-android-beta9-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta10-arm64-v8a.apk'
 (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
 Get-Content "$apk.sha256"
 ```
@@ -161,7 +161,7 @@ You can also install or update the APK through ADB:
 
 ```powershell
 $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
-$apk = '.\Barony-Android-Port-5.0.2-android-beta9-arm64-v8a.apk'
+$apk = '.\Barony-Android-Port-5.0.2-android-beta10-arm64-v8a.apk'
 & $adb devices
 & $adb install -r $apk
 ```
@@ -181,7 +181,7 @@ To enable owned DLC, download the Beta 5 archive builder, create a new
 owned-data ZIP, and import it through **Data & Saves**. Archives created with
 the Beta 4 builder do not contain the DLC entitlement transfer file.
 
-Beta 9 can be installed directly over Beta 5, Beta 6, Beta 7, Beta 8, or the
+Beta 10 can be installed directly over Beta 5 through Beta 9, or the
 adaptive-HDR test build. Existing owned data, DLC entitlements, saves, and
 settings remain compatible, so the archive does not need to be rebuilt for
 this update. Rebuild it with `-IncludeHolidayThemes` only if you want the
@@ -221,7 +221,8 @@ clicks always go to the game, never to on-screen buttons.
 
 Barony's own mod menu works on Android: choose **Play Modded Game**, select
 **Load Mod** for each mod you want, then **Start Modded Game**. Community
-translations are ordinary mods and work the same way.
+translations are ordinary mods and work the same way. For a beginner-friendly
+walkthrough, see [MODS.md](MODS.md).
 
 Mods live in the app's private storage, so they are installed from a ZIP:
 
@@ -452,7 +453,7 @@ Back up the generated keystore and password securely. Losing the signing key pre
 Build and verify a signed release:
 
 ```powershell
-.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-beta9 -VersionCode 15000223
+.\tools\build-release.ps1 -Clean -VersionName 5.0.2-android-beta10 -VersionCode 15000224
 ```
 
 Use a unique version name and a version code greater than every previously

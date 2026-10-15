@@ -540,12 +540,16 @@ public final class BaronyActivity extends SDLActivity {
         Log.w(TAG, "BARONY_ANDROID_DATA_VALIDATION_FAILED reason="
                 + validation.reason + " detail=" + validation.detail);
 
+        boolean television = TouchControlsView.isTelevision(this);
         String message = "Requires data from an owned Barony "
                 + EXPECTED_GAME_VERSION + " PC installation.\n\n"
                 + validation.detail + "\n\n"
                 + "Recommended: create an owned-data archive on Windows with "
-                + "Barony-Android-Data-Archive-Builder-5.0.2.ps1, copy the ZIP "
-                + "to this device, then select Import archive below.\n\n"
+                + "Barony-Android-Data-Archive-Builder-5.0.2.ps1, "
+                + (television
+                        ? "then select Receive from PC below and send the ZIP from a "
+                                + "computer on the same network.\n\n"
+                        : "copy the ZIP to this device, then select Import archive below.\n\n")
                 + "The APK contains no commercial game data. The archive must come "
                 + "from your own compatible Barony installation.";
 
@@ -556,8 +560,15 @@ public final class BaronyActivity extends SDLActivity {
                 .setMessage(message)
                 .setCancelable(false)
                 .setPositiveButton("Retry", (dialog, which) -> retryDataValidation())
-                .setNeutralButton("Import archive", (dialog, which) -> {
-                    if (storageManager != null) {
+                .setNeutralButton(television ? "Receive from PC" : "Import archive",
+                        (dialog, which) -> {
+                    if (storageManager == null) {
+                        return;
+                    }
+                    if (television) {
+                        // TVs have no document picker; receive over the network instead.
+                        storageManager.receiveFromPc();
+                    } else {
                         storageManager.pickOwnedDataArchive();
                     }
                 })
@@ -774,6 +785,9 @@ public final class BaronyActivity extends SDLActivity {
     protected void onPause() {
         if (touchControls != null) {
             touchControls.onHostPause();
+        }
+        if (storageManager != null) {
+            storageManager.onHostPause();
         }
         super.onPause();
     }

@@ -219,6 +219,41 @@ external keyboard and an external mouse (for example over Bluetooth) hides the
 touch overlay, just like a gamepad; disconnecting either one restores it. Mouse
 clicks always go to the game, never to on-screen buttons.
 
+Local split-screen co-op works with up to four gamepads: choose
+**Local Adventure** and have each player press **A** to join.
+
+## Android TV and Google TV
+
+The app appears in the TV's app list with a banner. On a TV, the touch overlay
+is hidden and the remote drives Barony's menus: the arrows move, **OK**
+selects, **Back** cancels, and **Menu** opens the pause menu. With a gamepad
+connected, the gamepad takes over and the remote's **Back** acts as Escape.
+
+TVs have no document picker, so data is installed with **Receive from PC**.
+
+## Receive from PC
+
+**Receive from PC (Wi-Fi)** in **Data & Saves**, and on the first-run data
+screen on a TV, receives one ZIP from a web browser on another device on the
+same local network. It accepts owned-data archives, mod archives, and save
+backups, recognizes which kind was sent, and hands it to the same validation
+and import path as the document picker.
+
+The device shows an `http://<address>:8765` URL and a 6-digit code. Safeguards:
+
+- It listens only while the receive screen is shown, and stops after one
+  successful transfer, **Cancel**, leaving the app, or five wrong codes.
+- Every upload must carry the code shown on the screen.
+- It accepts connections only from private, link-local, and loopback
+  addresses.
+- It accepts only `.zip` files that start with a ZIP signature, up to 2 GB.
+- Interrupted or rejected uploads are deleted.
+- It uses the existing networking permission from LAN multiplayer and requests
+  no new permission.
+
+Router client isolation or guest networks can block the connection, as for
+LAN play.
+
 ## Mods and translations
 
 Barony's own mod menu works on Android: choose **Play Modded Game**, select

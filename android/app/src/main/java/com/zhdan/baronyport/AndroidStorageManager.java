@@ -54,6 +54,8 @@ final class AndroidStorageManager {
     private static final int REQUEST_IMPORT_STATE = 7312;
     private static final int REQUEST_IMPORT_MODS = 7313;
     private static final String MOD_IMPORT_DIRECTORY = "barony-mods-import";
+    private static final String LAN_UPLOAD_NAME = "barony-lan-upload.zip";
+    private static final long LAN_UPLOAD_MAX_BYTES = 2L * 1024L * 1024L * 1024L;
     private static final String MOD_IMPORT_WORK_DIRECTORY = "barony-mods-import.partial";
     private static final String MOD_REMOVAL_LIST = "barony-mods-remove.txt";
     private static final String MOD_ARCHIVE_MANIFEST = ".barony-android-mods.json";
@@ -111,6 +113,9 @@ final class AndroidStorageManager {
     private AlertDialog operationDialog;
     private boolean pickerOpenedWhileBlocked;
     private boolean shuttingDown;
+    private LanTransferServer lanServer;
+    private AlertDialog lanDialog;
+    private boolean lanReceived;
 
     AndroidStorageManager(BaronyActivity host) {
         this.host = host;
@@ -120,30 +125,187 @@ final class AndroidStorageManager {
         if (shuttingDown || host.isFinishing() || host.isDestroyed()) {
             return;
         }
-        String[] actions = {
-                "Import owned game data",
-                "Export saves and settings",
-                "Import saves and settings",
-                "Import mods",
-                "Remove mods"
-        };
+        List<String> labels = new ArrayList<>();
+        List<Runnable> handlers = new ArrayList<>();
+        // A TV has no document picker, so offer only what works without one.
+        boolean television = TouchControlsView.isTelevision(host);
+        if (!television) {
+            labels.add("Import owned game data");
+            handlers.add(this::pickOwnedDataArchive);
+        }
+        labels.add("Receive from PC (Wi-Fi)");
+        handlers.add(this::receiveFromPc);
+        if (!television) {
+            labels.add("Export saves and settings");
+            handlers.add(this::createStateArchive);
+            labels.add("Import saves and settings");
+            handlers.add(this::pickStateArchive);
+            labels.add("Import mods");
+            handlers.add(this::pickModArchive);
+        }
+        labels.add("Remove mods");
+        handlers.add(this::chooseModsToRemove);
         new AlertDialog.Builder(host)
                 .setTitle("Barony data and saves")
-                .setItems(actions, (dialog, which) -> {
-                    if (which == 0) {
-                        pickOwnedDataArchive();
-                    } else if (which == 1) {
-                        createStateArchive();
-                    } else if (which == 2) {
-                        pickStateArchive();
-                    } else if (which == 3) {
-                        pickModArchive();
-                    } else if (which == 4) {
-                        chooseModsToRemove();
-                    }
-                })
+                .setItems(labels.toArray(new String[0]),
+                        (dialog, which) -> handlers.get(which).run())
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    /**
+     * Receives a game-data, mod, or save ZIP from a browser on another device
+     * on the local network, then hands it to the matching importer.
+     */
+    void receiveFromPc() {
+        if (shuttingDown || host.isFinishing() || host.isDestroyed() || lanServer != null) {
+            return;
+        }
+        File staging = host.getBaronyDataImportDirectory();
+        File root = staging == null ? null : staging.getParentFile();
+        List<String> addresses = LanTransferServer.getLocalAddresses();
+        if (root == null || addresses.isEmpty()) {
+            finishTask(TaskResult.failure(
+                    "Receive from PC unavailable",
+                    root == null
+                            ? "App-specific storage is unavailable on this device."
+                            : "Connect this device to Wi-Fi or Ethernet first."));
+            return;
+        }
+        File upload = new File(root, LAN_UPLOAD_NAME);
+        if (upload.exists() && !upload.delete()) {
+            Log.w(TAG, "Unable to delete a previous upload");
+        }
+        LanTransferServer server = new LanTransferServer(
+                upload, LAN_UPLOAD_MAX_BYTES, new LanTransferServer.Listener() {
+            @Override
+            public void onProgress(long receivedBytes, long totalBytes) {
+                host.runOnUiThread(() -> {
+                    if (lanDialog != null) {
+                        lanDialog.setMessage("Receiving " + humanBytes(receivedBytes) + " of "
+                                + humanBytes(totalBytes) + " ("
+                                + (totalBytes > 0 ? receivedBytes * 100 / totalBytes : 0)
+                                + "%)…\n\nKeep this screen open.");
+                    }
+                });
+            }
+
+            @Override
+            public void onReceived(File file, String originalName) {
+                host.runOnUiThread(() -> importReceivedArchive(file, originalName));
+            }
+
+            @Override
+            public void onStopped(String reason) {
+                host.runOnUiThread(() -> onLanServerStopped(reason));
+            }
+        });
+        try {
+            server.start();
+        } catch (IOException error) {
+            finishTask(TaskResult.failure("Receive from PC unavailable",
+                    "Unable to start the transfer: " + error.getMessage()));
+            return;
+        }
+        lanServer = server;
+        lanReceived = false;
+        StringBuilder urls = new StringBuilder();
+        for (String address : addresses) {
+            urls.append("    http://").append(address).append(':')
+                    .append(server.getPort()).append('\n');
+        }
+        String code = server.getCode();
+        lanDialog = new AlertDialog.Builder(host)
+                .setTitle("Receive from PC")
+                .setMessage("On a computer on the same network, open this address in a "
+                        + "web browser:\n\n" + urls
+                        + "\nThen enter this code:    " + code.substring(0, 3) + " "
+                        + code.substring(3) + "\n\nYou can send a game-data, mod, or save ZIP "
+                        + "made with the archive builder.")
+                .setNegativeButton("Cancel", (dialog, which) -> stopLanServer())
+                .setOnCancelListener(dialog -> stopLanServer())
+                .create();
+        lanDialog.show();
+        if (lanDialog.getWindow() != null) {
+            lanDialog.getWindow().addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    private void stopLanServer() {
+        if (lanServer != null) {
+            lanServer.stop();
+        }
+    }
+
+    private void onLanServerStopped(String reason) {
+        lanServer = null;
+        if (lanDialog != null) {
+            lanDialog.dismiss();
+            lanDialog = null;
+        }
+        if (lanReceived || shuttingDown || host.isFinishing() || host.isDestroyed()) {
+            return;
+        }
+        if ("too-many-codes".equals(reason)) {
+            finishTask(TaskResult.failure("Receive from PC stopped",
+                    "Too many wrong codes were entered. Open Receive from PC again to get "
+                            + "a new code."));
+        } else if (host.isNativeStartupBlocked()) {
+            host.showCurrentDataRequirement();
+        }
+    }
+
+    private void importReceivedArchive(File file, String originalName) {
+        lanReceived = true;
+        if (lanDialog != null) {
+            lanDialog.dismiss();
+            lanDialog = null;
+        }
+        Uri uri = Uri.fromFile(file);
+        String kind = classifyArchive(file);
+        Log.i(TAG, "BARONY_ANDROID_LAN_TRANSFER_IMPORT kind=" + kind);
+        StorageTask task;
+        if ("data".equals(kind)) {
+            task = () -> importOwnedData(uri);
+        } else if ("state".equals(kind)) {
+            task = () -> importState(uri);
+        } else {
+            task = () -> importMods(uri, modNameFromFileName(originalName));
+        }
+        runTask("Importing " + originalName, "Checking the received archive…", () -> {
+            try {
+                return task.run();
+            } finally {
+                if (file.exists() && !file.delete()) {
+                    Log.w(TAG, "Unable to delete the received archive");
+                }
+            }
+        });
+    }
+
+    /** "data", "state" (saves and settings), or "mods". */
+    private static String classifyArchive(File file) {
+        boolean stateManifest = false;
+        boolean statePayload = false;
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file)) {
+            java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                String name = entries.nextElement().getName();
+                if (DATA_MANIFEST_NAME.equals(name) || "maps/start.lmp".equals(name)
+                        || "models/models.txt".equals(name)) {
+                    return "data";
+                }
+                if (MOD_ARCHIVE_MANIFEST.equals(name)) {
+                    return "mods";
+                }
+                stateManifest |= STATE_MANIFEST_NAME.equals(name);
+                statePayload |= name.startsWith(STATE_PAYLOAD_DIRECTORY + "/");
+            }
+        } catch (IOException error) {
+            Log.w(TAG, "Unable to read the received archive", error);
+        }
+        return stateManifest && statePayload ? "state" : "mods";
     }
 
     void pickOwnedDataArchive() {
@@ -226,7 +388,7 @@ final class AndroidStorageManager {
             runTask(
                     "Importing mods",
                     "Checking and extracting the mod archive…",
-                    () -> importMods(uri));
+                    () -> importMods(uri, modNameFromFileName(getDisplayName(uri))));
         } else {
             runTask(
                     "Importing saves and settings",
@@ -490,7 +652,8 @@ final class AndroidStorageManager {
                         + "import the saves and settings before Barony starts.");
     }
 
-    private TaskResult importMods(Uri uri) throws IOException, JSONException {
+    private TaskResult importMods(Uri uri, String archiveName)
+            throws IOException, JSONException {
         File work = new File(host.getFilesDir(), MOD_IMPORT_WORK_DIRECTORY);
         File pending = new File(host.getFilesDir(), MOD_IMPORT_DIRECTORY);
         prepareEmptyDirectory(work);
@@ -503,7 +666,7 @@ final class AndroidStorageManager {
                     MOD_ARCHIVE_MAX_FILES,
                     MOD_ARCHIVE_MAX_BYTES,
                     ArchiveKind.MODS);
-            List<ModCandidate> mods = findArchiveMods(work, archiveModName(uri));
+            List<ModCandidate> mods = findArchiveMods(work, archiveName);
             if (mods.isEmpty()) {
                 deleteRecursively(work);
                 return TaskResult.failure(
@@ -636,8 +799,7 @@ final class AndroidStorageManager {
                 || IGNORED_ARCHIVE_FILE_NAMES.contains(name.toLowerCase(Locale.ROOT));
     }
 
-    private String archiveModName(Uri uri) {
-        String name = getDisplayName(uri);
+    private static String modNameFromFileName(String name) {
         if (name == null || "the selected document".equals(name)) {
             return "Imported mod";
         }
@@ -1112,8 +1274,14 @@ final class AndroidStorageManager {
         builder.show();
     }
 
+    /** Receive from PC only listens while its screen is on display. */
+    void onHostPause() {
+        stopLanServer();
+    }
+
     void shutdown() {
         shuttingDown = true;
+        stopLanServer();
         executor.shutdownNow();
         if (operationDialog != null) {
             operationDialog.dismiss();

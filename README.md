@@ -56,6 +56,10 @@ including touch controls and physical-controller support.
   license keys.
 - Portable save/settings export and import from the main menu.
 - Optional Halloween and winter-holiday themes.
+- Up to four-player local split-screen co-op with gamepads.
+- Android TV and Google TV support with remote navigation.
+- **Receive from PC:** send game data, mods, or saves from a web browser over
+  Wi-Fi, no cable or file manager needed.
 - Mods and translations through Barony's mod menu, installed from Steam
   Workshop subscriptions or mod ZIPs via **Data & Saves**
   ([mods guide](MODS.md)).

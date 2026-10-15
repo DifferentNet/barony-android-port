@@ -6589,6 +6589,28 @@ void drawAllPlayerCameras() {
         // setup a graphics frame
         beginGraphics();
 
+#ifdef ANDROID
+		{
+			// Log the local split-screen layout whenever it changes.
+			char layout[256];
+			int length = snprintf(layout, sizeof(layout), "split=%d client=%d players=%d",
+				splitscreen ? 1 : 0, clientnum, playercount);
+			for (int c = 0; c < MAXPLAYERS && length > 0 && length < (int)sizeof(layout); ++c)
+			{
+				const auto& cam = players[c]->camera();
+				length += snprintf(layout + length, sizeof(layout) - length,
+					" p%d=%s:%d,%d,%dx%d", c, client_disconnected[c] ? "off" : "on",
+					cam.winx, cam.winy, cam.winw, cam.winh);
+			}
+			static std::string lastLayout;
+			if (lastLayout != layout)
+			{
+				lastLayout = layout;
+				SDL_Log("BARONY_ANDROID_SPLITSCREEN_LAYOUT %s", layout);
+			}
+		}
+#endif
+
 		//int maximum = splitscreen ? MAXPLAYERS : 1;
 		for (int c = 0; c < MAXPLAYERS; ++c)
 		{

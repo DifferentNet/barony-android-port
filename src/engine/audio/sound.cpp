@@ -1019,11 +1019,9 @@ void sound_update(int player, int index, int numplayers)
 
 	FMOD_VECTOR position;
 
-	auto& camera = cameras[index];
-	if ( splitscreen )
-	{
-		camera = cameras[0];
-	}
+	// OpenAL has a single listener, so split-screen uses the first player's
+	// camera. Read it without copying it over the other players' cameras.
+	const view_t& camera = splitscreen ? cameras[0] : cameras[index];
 
 	position.x = -camera.y;
 	position.y = -camera.z / 32;

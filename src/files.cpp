@@ -48,7 +48,7 @@ ConsoleVariable<int> cvar_forceHoliday("/force_holiday", 0);
 ConsoleVariable<bool> cvar_disableHoliday("/disable_holiday", false);
 #endif
 
-HolidayTheme getCurrentHoliday(bool force) {
+static HolidayTheme getScheduledHoliday(bool force) {
 #ifdef EDITOR
     return HolidayTheme::THEME_NONE;
 #else
@@ -76,6 +76,39 @@ HolidayTheme getCurrentHoliday(bool force) {
         return HolidayTheme::THEME_NONE;
     }
 #endif
+}
+
+#ifdef ANDROID
+// Owned-data archives may omit the optional holiday themes. Treat a missing
+// theme folder as "no holiday" instead of failing to mount it at startup.
+static bool androidHolidayThemeInstalled(HolidayTheme holiday) {
+    static bool checked[HolidayTheme::THEME_MAX] = { false };
+    static bool installed[HolidayTheme::THEME_MAX] = { false };
+    if (!checked[holiday]) {
+        if (!datadir[0]) {
+            return false;
+        }
+        checked[holiday] = true;
+        const std::string path = std::string(datadir) + "/" + holidayThemeDirs[holiday];
+        struct stat info;
+        installed[holiday] = stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
+        printlog("[Holiday]: theme folder %s is %s", path.c_str(),
+            installed[holiday] ? "installed" : "missing, holiday theme disabled");
+        SDL_Log("BARONY_ANDROID_HOLIDAY_THEME theme=%s status=%s", holidayThemeDirs[holiday],
+            installed[holiday] ? "installed" : "missing");
+    }
+    return installed[holiday];
+}
+#endif
+
+HolidayTheme getCurrentHoliday(bool force) {
+    const HolidayTheme holiday = getScheduledHoliday(force);
+#ifdef ANDROID
+    if (holiday != HolidayTheme::THEME_NONE && !androidHolidayThemeInstalled(holiday)) {
+        return HolidayTheme::THEME_NONE;
+    }
+#endif
+    return holiday;
 }
 
 bool isCurrentHoliday(bool force) {

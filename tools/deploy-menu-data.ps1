@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$SourcePath = 'C:\Program Files (x86)\Steam\steamapps\common\Barony',
-    [string]$Serial
+    [string]$Serial,
+    [switch]$IncludeHolidayThemes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,6 +33,7 @@ $DlcDefinitions = @(
     }
 )
 $RequiredDirectories = @('books', 'data', 'fonts', 'images', 'items', 'lang', 'maps', 'models', 'music', 'sound')
+$HolidayThemeDirectories = @('themes/scarony', 'themes/merry')
 $RequiredFiles = @(
     'gamecontrollerdb.txt',
     'npcnames-female.txt',
@@ -240,14 +242,30 @@ if (Test-Path -LiteralPath $StagingRoot) {
 }
 New-Item -ItemType Directory -Path $StagingRoot | Out-Null
 
+$StagedDirectories = @($RequiredDirectories)
+if ($IncludeHolidayThemes) {
+    foreach ($directory in $HolidayThemeDirectories) {
+        if (Test-Path -LiteralPath (Join-Path $SourcePath $directory) -PathType Container) {
+            $StagedDirectories += $directory
+            Write-Host "Including holiday theme: $directory"
+        }
+        else {
+            Write-Warning "Holiday theme not found in the installation: $directory"
+        }
+    }
+}
+
 try {
-    foreach ($directory in $RequiredDirectories) {
+    foreach ($directory in $StagedDirectories) {
         $source = Join-Path $SourcePath $directory
         $destination = Join-Path $StagingRoot $directory
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
         $robocopyArguments = @($source, $destination, '/E', '/R:1', '/W:1', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
         if ($directory -eq 'data') {
             $robocopyArguments += @('/XF', '*.ogv')
+        }
+        elseif ($directory.StartsWith('themes/')) {
+            $robocopyArguments += @('/XF', '*.ogv', 'models.cache')
         }
         & robocopy.exe @robocopyArguments | Out-Null
         if ($LASTEXITCODE -ge 8) {
@@ -327,7 +345,12 @@ try {
     Write-Host "Menu data deployed to $RemoteData ($($StagedFiles.Count) owned files, $StagedSize bytes before compression)."
     Write-Host "Deployment manifest: Barony v$ExpectedGameVersion / source $ExpectedSourceCommit."
     Write-Host "DLC entitlements: $($DlcEntitlements.Count)."
-    Write-Host 'Holiday themes, tutorial videos, binaries, SDKs, and models.cache were not copied.'
+    if ($IncludeHolidayThemes) {
+        Write-Host 'Tutorial videos, binaries, SDKs, and models.cache were not copied.'
+    }
+    else {
+        Write-Host 'Holiday themes, tutorial videos, binaries, SDKs, and models.cache were not copied.'
+    }
 }
 finally {
     if (Test-Path -LiteralPath $StagingRoot) {

@@ -69,6 +69,10 @@ final class AndroidStorageManager {
             Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
                     "books", "data", "fonts", "images", "items", "lang", "maps",
                     "models", "music", "sound")));
+    private static final String HOLIDAY_THEMES_DIRECTORY = "themes";
+    private static final Set<String> HOLIDAY_THEMES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+                    "scarony", "merry")));
     private static final Set<String> DATA_ROOT_FILES =
             Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
                     "gamecontrollerdb.txt",
@@ -780,11 +784,29 @@ final class AndroidStorageManager {
         int separator = path.indexOf('/');
         String root = separator >= 0 ? path.substring(0, separator) : path;
         if (DATA_DIRECTORIES.contains(root)) {
-            String lower = path.toLowerCase(Locale.ROOT);
-            return !lower.endsWith("/models.cache")
-                    && !lower.endsWith(".ogv");
+            return isImportableDataFile(path);
+        }
+        if (HOLIDAY_THEMES_DIRECTORY.equals(root)) {
+            // Optional holiday themes: only the official theme folders.
+            if (separator < 0) {
+                return directory;
+            }
+            int themeEnd = path.indexOf('/', separator + 1);
+            String theme = themeEnd >= 0
+                    ? path.substring(separator + 1, themeEnd)
+                    : path.substring(separator + 1);
+            if (!HOLIDAY_THEMES.contains(theme)) {
+                return false;
+            }
+            return themeEnd >= 0 ? isImportableDataFile(path) : directory;
         }
         return !directory && separator < 0 && DATA_ROOT_FILES.contains(path);
+    }
+
+    private static boolean isImportableDataFile(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        return !lower.endsWith("/models.cache")
+                && !lower.endsWith(".ogv");
     }
 
     private static String normalizeArchivePath(String raw) throws IOException {

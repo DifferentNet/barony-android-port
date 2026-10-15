@@ -242,10 +242,12 @@ if(BARONY_ANDROID_BUILD_GAME)
             -Wno-inconsistent-missing-override
             -Wno-parentheses
     )
+    # Android receives its owned-data path at runtime through -datadir, so the
+    # base directory used to layer theme/mod overrides is that runtime path.
     target_compile_definitions(
         barony_game
         PRIVATE
-            BASE_DATA_DIR="./"
+            BASE_DATA_DIR=datadir
             IMGUI_IMPL_OPENGL_ES3
     )
     target_include_directories(

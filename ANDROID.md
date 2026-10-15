@@ -67,6 +67,13 @@ Barony-Android-Data-5.0.2.zip.sha256
 Use `-SourcePath <path>` if Barony is installed somewhere else and
 `-OutputPath <file.zip>` to select another destination.
 
+Barony's seasonal themes (Halloween from October 1 to November 1, and the
+winter holidays from December 1 to January 1) are optional. Without them, the
+game starts with its normal look during those dates. To keep the seasonal
+textures, music, and lighting, add `-IncludeHolidayThemes`; this adds about
+170 MB to the archive. Barony's **Festive Content** setting can still turn the
+theme off on the device.
+
 Copy the ZIP to the Android device without extracting it. Start
 **Barony Android Port**, select **Import archive**, and choose the ZIP with
 Android's document picker. The app:
@@ -142,8 +149,9 @@ Unblock-File .\Barony-Android-Data-Installer-5.0.2.ps1
 
 The script finds the default Windows Steam installation, validates v5.0.2,
 copies only the required data, and creates the same manifest. Use
-`-SourcePath <path>` when Barony is installed elsewhere and
-`-Serial <adb-serial>` when more than one Android target is connected.
+`-SourcePath <path>` when Barony is installed elsewhere,
+`-Serial <adb-serial>` when more than one Android target is connected, and
+`-IncludeHolidayThemes` to also copy the optional seasonal themes.
 
 You can also install or update the APK through ADB:
 

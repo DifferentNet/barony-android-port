@@ -2,6 +2,7 @@
 param(
     [string]$SourcePath,
     [string]$OutputPath,
+    [switch]$IncludeHolidayThemes,
     [switch]$Force
 )
 
@@ -37,6 +38,7 @@ $RequiredDirectories = @(
     'books', 'data', 'fonts', 'images', 'items',
     'lang', 'maps', 'models', 'music', 'sound'
 )
+$HolidayThemeDirectories = @('themes/scarony', 'themes/merry')
 $RequiredFiles = @(
     'gamecontrollerdb.txt',
     'npcnames-female.txt',
@@ -247,8 +249,28 @@ foreach ($RelativePath in $CriticalFiles) {
 }
 Write-Host "Validated owned Barony v$ExpectedGameVersion data."
 
+$ArchiveDirectories = @($RequiredDirectories)
+if ($IncludeHolidayThemes) {
+    $ThemesPath = Join-Path $SourcePath 'themes'
+    if (Test-Path -LiteralPath $ThemesPath -PathType Container) {
+        $ThemesItem = Get-Item -LiteralPath $ThemesPath -Force
+        if (($ThemesItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Symbolic links and reparse points are not supported: $ThemesPath"
+        }
+    }
+    foreach ($Directory in $HolidayThemeDirectories) {
+        if (Test-Path -LiteralPath (Join-Path $SourcePath $Directory) -PathType Container) {
+            $ArchiveDirectories += $Directory
+            Write-Host "Including holiday theme: $Directory"
+        }
+        else {
+            Write-Warning "Holiday theme not found in the installation: $Directory"
+        }
+    }
+}
+
 $FilesByRelativePath = [ordered]@{}
-foreach ($Directory in $RequiredDirectories) {
+foreach ($Directory in $ArchiveDirectories) {
     $DirectoryPath = Join-Path $SourcePath $Directory
     $DirectoryItem = Get-Item -LiteralPath $DirectoryPath -Force
     if (($DirectoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
@@ -521,6 +543,9 @@ Write-Host "SHA-256: $ArchiveHash"
 Write-Host "Files: $PayloadFileCount"
 Write-Host "Uncompressed data: $UncompressedBytes bytes"
 Write-Host "Source type: $SourceType"
+if (-not $IncludeHolidayThemes) {
+    Write-Host 'Holiday themes: not included (use -IncludeHolidayThemes to add them).'
+}
 Write-Host ''
 Write-Host 'Copy the ZIP to the Android device, start Barony Android Port,'
 Write-Host 'and select Import archive. Do not extract the ZIP manually.'

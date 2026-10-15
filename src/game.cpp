@@ -7195,9 +7195,14 @@ int main(int argc, char** argv)
 		//SDL_Surface *sky_bmp;
 		light_t* light;
 
+#ifdef ANDROID
+		// BASE_DATA_DIR is datadir itself here; -datadir supplies the path.
+		size_t datadirsz = 0;
+#else
 		size_t datadirsz = std::min(sizeof(datadir) - 1, strlen(BASE_DATA_DIR));
 		strncpy(datadir, BASE_DATA_DIR, datadirsz);
 		datadir[datadirsz] = '\0';
+#endif
 #ifdef WINDOWS
 		strcpy(outputdir, "./");
 #else
@@ -7716,7 +7721,10 @@ int main(int argc, char** argv)
 							glDrawWorld(&menucam, REALCOLORS);
 							drawEntities3D(&menucam, REALCOLORS);
 							glEndCamera(&menucam, true, map);
-							list_RemoveNode(light->node);
+							if ( light )
+							{
+								list_RemoveNode(light->node);
+							}
 						}
 
 						MainMenu::doMainMenu(!intro);

@@ -14,7 +14,7 @@ The Android package contains engine code and open-source dependency notices only
 Download the APK and owned-data archive builder from the
 [GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
 The current normal prerelease is
-[Barony Android Port 5.0.2 Beta 8](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-beta8).
+[Barony Android Port 5.0.2 Beta 9](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-beta9).
 Run the builder on a Windows PC with an owned Steam or GOG Barony v5.0.2
 installation, copy the generated ZIP to the Android device, then select
 **Import archive** when the port starts. The ZIP remains the user's private
@@ -23,7 +23,7 @@ commercial data and must not be shared.
 Beta 4 users who want to enable owned DLC must download the archive builder
 from Beta 5 or newer, create a new owned-data ZIP, and import it through
 **Data & Saves**. Archives created with the older builder do not contain the
-DLC entitlement transfer file. Beta 5 archives remain compatible with Beta 8
+DLC entitlement transfer file. Beta 5 archives remain compatible with Beta 9
 and do not need to be rebuilt.
 
 See [ANDROID.md](ANDROID.md) for checksum verification, installation

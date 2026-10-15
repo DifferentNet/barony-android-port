@@ -1,6 +1,9 @@
 package com.zhdan.baronyport;
 
+import android.app.UiModeManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -8,8 +11,10 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.hardware.input.InputManager;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 import android.util.SparseArray;
+import android.util.SparseLongArray;
 import android.view.DisplayCutout;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -61,16 +66,23 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
     private static final int SHAPE_CIRCLE = 0;
     private static final int SHAPE_PILL = 1;
 
+    // Barony samples buttons once per frame. Some TV remotes (HDMI-CEC in
+    // particular) report a press and release together, so hold each remote
+    // press for a few frames.
+    private static final long REMOTE_MIN_PRESS_MS = 80;
+
     private static final int PHYSICAL_INPUT_NONE = 0;
     private static final int PHYSICAL_INPUT_GAMEPAD = 1;
     private static final int PHYSICAL_INPUT_KEYBOARD_MOUSE = 2;
 
     private final InputManager inputManager;
+    private final boolean televisionMode;
     private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final List<VirtualButton> buttons = new ArrayList<>();
     private final SparseArray<TouchTarget> activeTouches = new SparseArray<>();
+    private final SparseLongArray remotePressTimes = new SparseLongArray();
     private final VirtualStick leftStick = new VirtualStick(AXIS_LEFT_X, AXIS_LEFT_Y, "MOVE");
     private final VirtualStick rightStick = new VirtualStick(AXIS_RIGHT_X, AXIS_RIGHT_Y, "LOOK");
     private final RectF moveZone = new RectF();
@@ -100,6 +112,7 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
     TouchControlsView(Context context) {
         super(context);
         inputManager = (InputManager) context.getSystemService(Context.INPUT_SERVICE);
+        televisionMode = isTelevision(context);
         setBackgroundColor(Color.TRANSPARENT);
         setWillNotDraw(false);
         setFocusable(false);
@@ -120,8 +133,76 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
         if (inputManager != null) {
             inputManager.registerInputDeviceListener(this, null);
         }
-        Log.i(TAG, "BARONY_ANDROID_TOUCH_CONTROLLER_READY");
+        Log.i(TAG, "BARONY_ANDROID_TOUCH_CONTROLLER_READY television="
+                + (televisionMode ? 1 : 0));
         postDelayed(refreshInputModeRunnable, 500);
+    }
+
+    /** Android TV and Google TV devices, which are driven by a remote or gamepad. */
+    static boolean isTelevision(Context context) {
+        UiModeManager uiModeManager =
+                (UiModeManager) context.getSystemService(Context.UI_MODE_SERVICE);
+        if (uiModeManager != null
+                && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION) {
+            return true;
+        }
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+    }
+
+    /**
+     * On a TV, the remote drives the virtual controller: the D-pad moves, OK
+     * confirms, Back cancels, and Menu pauses. Returns true when the event was
+     * consumed.
+     */
+    boolean handleRemoteKey(KeyEvent event) {
+        if (!televisionMode || !controllerRegistered) {
+            return false;
+        }
+        if ((event.getSource() & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD) {
+            return false;
+        }
+        int button;
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                button = event.getKeyCode();
+                break;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                button = KeyEvent.KEYCODE_BUTTON_A;
+                break;
+            case KeyEvent.KEYCODE_BACK:
+                button = KeyEvent.KEYCODE_BUTTON_B;
+                break;
+            case KeyEvent.KEYCODE_MENU:
+                button = KeyEvent.KEYCODE_BUTTON_START;
+                break;
+            default:
+                return false;
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                remotePressTimes.put(button, SystemClock.uptimeMillis());
+                SDLControllerManager.onNativePadDown(VIRTUAL_DEVICE_ID, button);
+            }
+        } else if (event.getAction() == KeyEvent.ACTION_UP) {
+            final int releasedButton = button;
+            long held = SystemClock.uptimeMillis() - remotePressTimes.get(button, 0L);
+            Runnable release = () -> {
+                if (controllerRegistered) {
+                    SDLControllerManager.onNativePadUp(VIRTUAL_DEVICE_ID, releasedButton);
+                }
+            };
+            if (held >= REMOTE_MIN_PRESS_MS) {
+                release.run();
+            } else {
+                postDelayed(release, REMOTE_MIN_PRESS_MS - held);
+            }
+        }
+        return true;
     }
 
     void setLayoutMode(int mode) {
@@ -180,7 +261,9 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
             setVisibility(GONE);
         } else {
             registerVirtualController();
-            setVisibility(controllerRegistered ? VISIBLE : GONE);
+            // A TV has no touchscreen to use the overlay with; the remote
+            // drives the virtual controller instead.
+            setVisibility(controllerRegistered && !televisionMode ? VISIBLE : GONE);
         }
 
         if (!inputModeInitialized || physicalInput != detectedInput) {
@@ -196,12 +279,13 @@ final class TouchControlsView extends View implements InputManager.InputDeviceLi
             }
             Log.i(TAG, state);
             Log.i(TAG, "BARONY_ANDROID_TOUCH_VISIBILITY visible="
-                    + ((!hideOverlay && controllerRegistered) ? 1 : 0)
+                    + ((!hideOverlay && controllerRegistered && !televisionMode) ? 1 : 0)
                     + " physicalController="
                     + (detectedInput == PHYSICAL_INPUT_GAMEPAD ? 1 : 0)
                     + " keyboardMouse="
                     + (detectedInput == PHYSICAL_INPUT_KEYBOARD_MOUSE ? 1 : 0)
-                    + " virtualController=" + (controllerRegistered ? 1 : 0));
+                    + " virtualController=" + (controllerRegistered ? 1 : 0)
+                    + " television=" + (televisionMode ? 1 : 0));
         }
     }
 

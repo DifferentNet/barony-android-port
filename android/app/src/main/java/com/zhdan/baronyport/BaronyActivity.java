@@ -735,7 +735,21 @@ public final class BaronyActivity extends SDLActivity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (!startupBlocked && touchControls != null && touchControls.handleRemoteKey(event)) {
+            return true;
+        }
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+            if (!startupBlocked && TouchControlsView.isTelevision(this)) {
+                // A TV remote's Back is the everyday cancel button. With a
+                // gamepad connected, pass it to Barony as Escape instead of
+                // quitting the game.
+                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                    SDLActivity.onNativeKeyDown(KeyEvent.KEYCODE_ESCAPE);
+                } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                    SDLActivity.onNativeKeyUp(KeyEvent.KEYCODE_ESCAPE);
+                }
+                return true;
+            }
             if (event.getAction() == KeyEvent.ACTION_UP) {
                 if (startupBlocked) {
                     finish();

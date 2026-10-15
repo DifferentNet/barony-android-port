@@ -28735,6 +28735,14 @@ failed:
 
 		soundActivate();
 
+#ifdef ANDROID
+		// Android can stop the process without a clean quit, which is when the
+		// chosen mods are normally written to config.json. Persist them now.
+		settingsMount(false);
+		(void)settingsSave();
+		SDL_Log("BARONY_ANDROID_MODS_STARTED count=%d", Mods::numCurrentModsLoaded);
+#endif
+
 		if ( Mods::numCurrentModsLoaded > 0 )
 		{
 			steamAchievement("BARONY_ACH_LOCAL_CUSTOMS");
@@ -28912,11 +28920,22 @@ failed:
 				{
 					Mods::mountedFilepaths.push_back(std::make_pair(fullpath, *it));
 					modLoaded = true;
+#ifdef ANDROID
+					SDL_Log("BARONY_ANDROID_MOD_MOUNTED name=%s", it->c_str());
+#endif
 					button.setText(Language::get(5854));
 					button.setBackground("*#images/ui/Main Menus/Mods/Unload_Button_00.png");
 					button.setBackgroundHighlighted("*#images/ui/Main Menus/Mods/Unload_Button_High00.png");
 					button.setBackgroundActivated("*#images/ui/Main Menus/Mods/Unload_Button_Press00.png");
 				}
+#ifdef ANDROID
+				else
+				{
+					const char* error = PHYSFS_getErrorByCode(PHYSFS_getLastErrorCode());
+					printlog("[PhysFS]: unsuccessfully mounted mod %s. Error: %s", fullpath, error);
+					SDL_Log("BARONY_ANDROID_MOD_MOUNT_FAILED name=%s error=%s", it->c_str(), error);
+				}
+#endif
 			}
 		}
 

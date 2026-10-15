@@ -105,6 +105,7 @@ public final class BaronyActivity extends SDLActivity {
             }
             return;
         }
+        storageManager.applyPendingModChangesAtStartup();
         DataValidation validation = validateGameData();
         if (!validation.valid) {
             blockNativeStartup();

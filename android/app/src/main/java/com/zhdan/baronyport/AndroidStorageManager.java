@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.util.Log;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -28,11 +29,13 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +52,23 @@ final class AndroidStorageManager {
     private static final int REQUEST_IMPORT_DATA = 7310;
     private static final int REQUEST_EXPORT_STATE = 7311;
     private static final int REQUEST_IMPORT_STATE = 7312;
+    private static final int REQUEST_IMPORT_MODS = 7313;
+    private static final String MOD_IMPORT_DIRECTORY = "barony-mods-import";
+    private static final String MOD_IMPORT_WORK_DIRECTORY = "barony-mods-import.partial";
+    private static final String MOD_REMOVAL_LIST = "barony-mods-remove.txt";
+    private static final String MOD_ARCHIVE_MANIFEST = ".barony-android-mods.json";
+    private static final int MOD_ARCHIVE_MAX_FILES = 100_000;
+    private static final long MOD_ARCHIVE_MAX_BYTES = 2L * 1024L * 1024L * 1024L;
+    private static final int MOD_FOLDER_NAME_MAX_LENGTH = 64;
+    // A folder counts as a Barony mod when it contains part of the base data layout.
+    private static final Set<String> MOD_CONTENT_NAMES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+                    "books", "data", "editor", "fonts", "images", "items", "lang",
+                    "maps", "models", "music", "sound", "preview.png")));
+    // Desktop archivers add these; they are never part of a mod.
+    private static final Set<String> IGNORED_ARCHIVE_FILE_NAMES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+                    ".ds_store", "thumbs.db", "desktop.ini")));
     private static final String DATA_IMPORT_READY = ".barony-import-ready";
     private static final String DATA_MANIFEST_NAME = ".barony-android-data.json";
     private static final String STATE_MANIFEST_NAME = "manifest.json";
@@ -103,7 +123,9 @@ final class AndroidStorageManager {
         String[] actions = {
                 "Import owned game data",
                 "Export saves and settings",
-                "Import saves and settings"
+                "Import saves and settings",
+                "Import mods",
+                "Remove mods"
         };
         new AlertDialog.Builder(host)
                 .setTitle("Barony data and saves")
@@ -114,6 +136,10 @@ final class AndroidStorageManager {
                         createStateArchive();
                     } else if (which == 2) {
                         pickStateArchive();
+                    } else if (which == 3) {
+                        pickModArchive();
+                    } else if (which == 4) {
+                        chooseModsToRemove();
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -147,6 +173,18 @@ final class AndroidStorageManager {
         Log.i(TAG, "BARONY_ANDROID_STATE_ARCHIVE_IMPORT_PICKER_OPENED");
     }
 
+    private void pickModArchive() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
+                        "application/zip",
+                        "application/x-zip-compressed",
+                        "application/octet-stream"
+                });
+        host.startActivityForResult(intent, REQUEST_IMPORT_MODS);
+    }
+
     private void createStateArchive() {
         String filename = "Barony-Android-Saves-"
                 + ARCHIVE_TIME.format(Instant.now()) + ".zip";
@@ -161,7 +199,8 @@ final class AndroidStorageManager {
     boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode != REQUEST_IMPORT_DATA
                 && requestCode != REQUEST_EXPORT_STATE
-                && requestCode != REQUEST_IMPORT_STATE) {
+                && requestCode != REQUEST_IMPORT_STATE
+                && requestCode != REQUEST_IMPORT_MODS) {
             return false;
         }
 
@@ -183,6 +222,11 @@ final class AndroidStorageManager {
                     "Exporting saves and settings",
                     "Creating the portable save archive…",
                     () -> exportState(uri));
+        } else if (requestCode == REQUEST_IMPORT_MODS) {
+            runTask(
+                    "Importing mods",
+                    "Checking and extracting the mod archive…",
+                    () -> importMods(uri));
         } else {
             runTask(
                     "Importing saves and settings",
@@ -270,7 +314,7 @@ final class AndroidStorageManager {
                     staging,
                     DATA_ARCHIVE_MAX_FILES,
                     DATA_ARCHIVE_MAX_BYTES,
-                    true);
+                    ArchiveKind.OWNED_DATA);
             BaronyActivity.DataValidation validation =
                     host.validateGameData(staging, "android-document-import");
             if (!validation.valid) {
@@ -420,7 +464,7 @@ final class AndroidStorageManager {
                     staging,
                     STATE_ARCHIVE_MAX_FILES + 1,
                     STATE_ARCHIVE_MAX_BYTES + 1024L * 1024L,
-                    false);
+                    ArchiveKind.STATE);
             validateStateStaging(staging);
             replaceDirectory(staging, destination, "barony-state-import-backup");
         } catch (IOException | JSONException | NoSuchAlgorithmException error) {
@@ -446,12 +490,373 @@ final class AndroidStorageManager {
                         + "import the saves and settings before Barony starts.");
     }
 
+    private TaskResult importMods(Uri uri) throws IOException, JSONException {
+        File work = new File(host.getFilesDir(), MOD_IMPORT_WORK_DIRECTORY);
+        File pending = new File(host.getFilesDir(), MOD_IMPORT_DIRECTORY);
+        prepareEmptyDirectory(work);
+        Log.i(TAG, "BARONY_ANDROID_MOD_ARCHIVE_IMPORT_STARTED");
+        List<String> names = new ArrayList<>();
+        try {
+            ExtractionStats stats = extractArchive(
+                    uri,
+                    work,
+                    MOD_ARCHIVE_MAX_FILES,
+                    MOD_ARCHIVE_MAX_BYTES,
+                    ArchiveKind.MODS);
+            List<ModCandidate> mods = findArchiveMods(work, archiveModName(uri));
+            if (mods.isEmpty()) {
+                deleteRecursively(work);
+                return TaskResult.failure(
+                        "No Barony mod found",
+                        "The ZIP must contain a mod folder with Barony files such as "
+                                + "data, maps, models, images, lang, music, or preview.png.");
+            }
+            if (!pending.mkdirs() && !pending.isDirectory()) {
+                throw new IOException("Unable to create the mod staging directory.");
+            }
+
+            // Moving the archive root itself (a single-mod ZIP) must come last.
+            Set<String> usedNames = new HashSet<>();
+            ModCandidate rootMod = null;
+            for (ModCandidate mod : mods) {
+                mod.name = uniqueModName(sanitizeModFolderName(mod.name), usedNames);
+                if (mod.directory.equals(work)) {
+                    rootMod = mod;
+                    continue;
+                }
+                stageMod(mod, pending);
+                names.add(mod.name);
+            }
+            if (rootMod != null) {
+                stageMod(rootMod, pending);
+                names.add(rootMod.name);
+            } else {
+                deleteRecursively(work);
+            }
+            Log.i(TAG, "BARONY_ANDROID_MOD_ARCHIVE_IMPORT_READY mods=" + names.size()
+                    + " files=" + stats.files + " bytes=" + stats.bytes);
+        } catch (IOException | JSONException error) {
+            deleteRecursively(work);
+            throw error;
+        }
+
+        return TaskResult.restart(
+                "Mods ready",
+                "Ready to install: " + String.join(", ", names) + ".\n\n"
+                        + "Exit now, then open the port again. In Barony, choose "
+                        + "Play Modded Game, load the mods you want, and start the game.");
+    }
+
+    private static void stageMod(ModCandidate mod, File pending) throws IOException {
+        File target = new File(pending, mod.name);
+        if (target.exists() && !deleteRecursively(target)) {
+            throw new IOException("Unable to replace the staged mod: " + mod.name);
+        }
+        movePath(mod.directory, target);
+    }
+
+    private static List<ModCandidate> findArchiveMods(File root, String archiveName)
+            throws IOException, JSONException {
+        List<ModCandidate> mods = new ArrayList<>();
+        File manifest = new File(root, MOD_ARCHIVE_MANIFEST);
+        if (manifest.isFile()) {
+            // Written by the Windows archive builder: one entry per top-level mod folder.
+            JSONObject json = new JSONObject(new String(
+                    Files.readAllBytes(manifest.toPath()), StandardCharsets.UTF_8));
+            if (!manifest.delete()) {
+                throw new IOException("Unable to remove the mod archive manifest.");
+            }
+            JSONArray list = json.optJSONArray("mods");
+            for (int i = 0; list != null && i < list.length(); ++i) {
+                JSONObject item = list.optJSONObject(i);
+                String folder = item == null ? "" : item.optString("folder", "");
+                File directory = new File(root, folder);
+                if (isSafeModFolderName(folder) && directory.isDirectory()
+                        && looksLikeMod(directory)) {
+                    mods.add(new ModCandidate(directory, folder));
+                }
+            }
+            return mods;
+        }
+        if (looksLikeMod(root)) {
+            mods.add(new ModCandidate(root, archiveName));
+            return mods;
+        }
+        File[] children = sortedModDirectories(root);
+        for (File child : children) {
+            if (looksLikeMod(child)) {
+                mods.add(new ModCandidate(child, child.getName()));
+            }
+        }
+        if (mods.isEmpty() && children.length == 1) {
+            // Tolerate one wrapper folder, for example "MyMod-v2/MyMod/...".
+            for (File nested : sortedModDirectories(children[0])) {
+                if (looksLikeMod(nested)) {
+                    mods.add(new ModCandidate(nested, nested.getName()));
+                }
+            }
+        }
+        return mods;
+    }
+
+    private static boolean looksLikeMod(File directory) {
+        String[] names = directory.list();
+        if (names == null) {
+            return false;
+        }
+        for (String name : names) {
+            if (MOD_CONTENT_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static File[] sortedModDirectories(File directory) {
+        File[] children = directory.listFiles(child -> child.isDirectory()
+                && !child.getName().startsWith(".")
+                && !"__MACOSX".equals(child.getName()));
+        if (children == null) {
+            return new File[0];
+        }
+        Arrays.sort(children, (left, right) ->
+                left.getName().compareToIgnoreCase(right.getName()));
+        return children;
+    }
+
+    private static boolean isIgnoredModArchiveEntry(String path) {
+        for (String part : path.split("/")) {
+            if ("__MACOSX".equals(part)) {
+                return true;
+            }
+        }
+        int separator = path.lastIndexOf('/');
+        String name = separator >= 0 ? path.substring(separator + 1) : path;
+        return name.startsWith("._")
+                || IGNORED_ARCHIVE_FILE_NAMES.contains(name.toLowerCase(Locale.ROOT));
+    }
+
+    private String archiveModName(Uri uri) {
+        String name = getDisplayName(uri);
+        if (name == null || "the selected document".equals(name)) {
+            return "Imported mod";
+        }
+        if (name.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+            name = name.substring(0, name.length() - 4);
+        }
+        return name;
+    }
+
+    // Barony lists mods by folder name; keep names portable and readable.
+    private static String sanitizeModFolderName(String raw) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < raw.length(); ++i) {
+            char c = raw.charAt(i);
+            boolean allowed = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9') || " _-.()".indexOf(c) >= 0;
+            out.append(allowed ? c : '_');
+        }
+        String name = out.toString().replaceAll("_{2,}", "_").trim();
+        while (name.startsWith(".")) {
+            name = name.substring(1);
+        }
+        name = name.replaceAll("[ .]+$", "");
+        if (name.length() > MOD_FOLDER_NAME_MAX_LENGTH) {
+            name = name.substring(0, MOD_FOLDER_NAME_MAX_LENGTH).trim();
+        }
+        return name.isEmpty() ? "Mod" : name;
+    }
+
+    private static String uniqueModName(String name, Set<String> usedNames) {
+        String candidate = name;
+        for (int suffix = 2; !usedNames.add(candidate.toLowerCase(Locale.ROOT)); ++suffix) {
+            candidate = name + " (" + suffix + ")";
+        }
+        return candidate;
+    }
+
+    private static boolean isSafeModFolderName(String name) {
+        return name != null && !name.isEmpty() && name.length() <= 255
+                && !name.contains("/") && !name.contains("\\") && !name.contains("\0")
+                && !".".equals(name) && !"..".equals(name);
+    }
+
+    private void chooseModsToRemove() {
+        File modsRoot = new File(host.getBaronyOutputDirectory(), "mods");
+        File pending = new File(host.getFilesDir(), MOD_IMPORT_DIRECTORY);
+        Set<String> scheduled = readModRemovalList();
+        List<String> labels = new ArrayList<>();
+        List<File> targets = new ArrayList<>();
+        List<Boolean> pendingOnly = new ArrayList<>();
+        for (File mod : sortedModDirectories(modsRoot)) {
+            if (!scheduled.contains(mod.getName())) {
+                labels.add(mod.getName());
+                targets.add(mod);
+                pendingOnly.add(false);
+            }
+        }
+        for (File mod : sortedModDirectories(pending)) {
+            labels.add(mod.getName() + " (not installed yet)");
+            targets.add(mod);
+            pendingOnly.add(true);
+        }
+        if (labels.isEmpty()) {
+            new AlertDialog.Builder(host)
+                    .setTitle("Remove mods")
+                    .setMessage("No mods are installed.")
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
+        }
+        boolean[] checked = new boolean[labels.size()];
+        new AlertDialog.Builder(host)
+                .setTitle("Remove mods")
+                .setMultiChoiceItems(labels.toArray(new String[0]), checked,
+                        (dialog, which, isChecked) -> checked[which] = isChecked)
+                .setPositiveButton("Remove", (dialog, which) -> runTask(
+                        "Removing mods",
+                        "Updating the mod list…",
+                        () -> removeMods(targets, pendingOnly, checked)))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private TaskResult removeMods(List<File> targets, List<Boolean> pendingOnly,
+            boolean[] checked) throws IOException {
+        Set<String> scheduled = readModRemovalList();
+        List<String> removedNow = new ArrayList<>();
+        List<String> removedLater = new ArrayList<>();
+        for (int i = 0; i < targets.size(); ++i) {
+            if (!checked[i]) {
+                continue;
+            }
+            File target = targets.get(i);
+            if (pendingOnly.get(i)) {
+                if (!deleteRecursively(target)) {
+                    throw new IOException("Unable to remove the staged mod: " + target.getName());
+                }
+                removedNow.add(target.getName());
+            } else {
+                scheduled.add(target.getName());
+                removedLater.add(target.getName());
+            }
+        }
+        if (removedNow.isEmpty() && removedLater.isEmpty()) {
+            return TaskResult.success("No mods removed", "No mods were selected.");
+        }
+        if (!removedLater.isEmpty()) {
+            Files.write(
+                    new File(host.getFilesDir(), MOD_REMOVAL_LIST).toPath(),
+                    (String.join("\n", scheduled) + "\n").getBytes(StandardCharsets.UTF_8));
+        }
+        Log.i(TAG, "BARONY_ANDROID_MOD_REMOVAL_READY now=" + removedNow.size()
+                + " next_start=" + removedLater.size());
+        if (removedLater.isEmpty()) {
+            return TaskResult.success(
+                    "Mods removed",
+                    "Removed before installation: " + String.join(", ", removedNow) + ".");
+        }
+        return TaskResult.restart(
+                "Mods will be removed",
+                "Exit now, then open the port again to finish removing: "
+                        + String.join(", ", removedLater) + ".");
+    }
+
+    private Set<String> readModRemovalList() {
+        Set<String> names = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        File list = new File(host.getFilesDir(), MOD_REMOVAL_LIST);
+        if (!list.isFile()) {
+            return names;
+        }
+        try {
+            for (String line : Files.readAllLines(list.toPath(), StandardCharsets.UTF_8)) {
+                String name = line.trim();
+                if (isSafeModFolderName(name)) {
+                    names.add(name);
+                }
+            }
+        } catch (IOException error) {
+            Log.w(TAG, "Unable to read the pending mod removal list", error);
+        }
+        return names;
+    }
+
+    /**
+     * Applies staged mod imports and removals before Barony mounts anything.
+     * Mods are optional, so a failure is logged and never blocks startup.
+     */
+    void applyPendingModChangesAtStartup() {
+        File modsRoot = new File(host.getBaronyOutputDirectory(), "mods");
+        File pending = new File(host.getFilesDir(), MOD_IMPORT_DIRECTORY);
+        File removalList = new File(host.getFilesDir(), MOD_REMOVAL_LIST);
+        File work = new File(host.getFilesDir(), MOD_IMPORT_WORK_DIRECTORY);
+        int removed = 0;
+        int installed = 0;
+        try {
+            if (work.exists() && !deleteRecursively(work)) {
+                throw new IOException("Unable to clear an interrupted mod import.");
+            }
+            for (String name : readModRemovalList()) {
+                File target = new File(modsRoot, name);
+                if (target.exists()) {
+                    if (!deleteRecursively(target)) {
+                        throw new IOException("Unable to remove mod: " + name);
+                    }
+                    ++removed;
+                }
+            }
+            if (removalList.exists() && !removalList.delete()) {
+                throw new IOException("Unable to clear the pending mod removal list.");
+            }
+            if (pending.isDirectory()) {
+                if (!modsRoot.mkdirs() && !modsRoot.isDirectory()) {
+                    throw new IOException("Unable to create the mods directory.");
+                }
+                for (File mod : sortedModDirectories(pending)) {
+                    File target = new File(modsRoot, mod.getName());
+                    if (target.exists() && !deleteRecursively(target)) {
+                        throw new IOException("Unable to replace mod: " + mod.getName());
+                    }
+                    movePath(mod, target);
+                    ++installed;
+                }
+                if (!deleteRecursively(pending)) {
+                    throw new IOException("Unable to clear the mod staging directory.");
+                }
+            }
+        } catch (IOException error) {
+            Log.e(TAG, "BARONY_ANDROID_MODS_APPLY_FAILED installed=" + installed
+                    + " removed=" + removed, error);
+            return;
+        }
+        if (removed > 0 || installed > 0) {
+            Log.i(TAG, "BARONY_ANDROID_MODS_APPLIED installed=" + installed
+                    + " removed=" + removed);
+        }
+    }
+
+    private static final class ModCandidate {
+        final File directory;
+        String name;
+
+        ModCandidate(File directory, String name) {
+            this.directory = directory;
+            this.name = name;
+        }
+    }
+
+    private enum ArchiveKind {
+        OWNED_DATA,
+        STATE,
+        MODS
+    }
+
     private ExtractionStats extractArchive(
             Uri uri,
             File root,
             int maximumFiles,
             long maximumBytes,
-            boolean ownedDataArchive) throws IOException {
+            ArchiveKind kind) throws IOException {
         ContentResolver resolver = host.getContentResolver();
         try (InputStream raw = resolver.openInputStream(uri)) {
             if (raw == null) {
@@ -466,7 +871,8 @@ final class AndroidStorageManager {
                 ZipEntry entry;
                 while ((entry = zip.getNextEntry()) != null) {
                     String name = normalizeArchivePath(entry.getName());
-                    if (name.isEmpty()) {
+                    if (name.isEmpty()
+                            || (kind == ArchiveKind.MODS && isIgnoredModArchiveEntry(name))) {
                         zip.closeEntry();
                         continue;
                     }
@@ -477,7 +883,8 @@ final class AndroidStorageManager {
                         throw new IOException(
                                 "The archive exceeds the " + maximumFiles + " entry limit.");
                     }
-                    if (ownedDataArchive && !isAllowedDataArchivePath(name, entry.isDirectory())) {
+                    if (kind == ArchiveKind.OWNED_DATA
+                            && !isAllowedDataArchivePath(name, entry.isDirectory())) {
                         throw new IOException(
                                 "The archive contains an unsupported Barony path: " + name);
                     }
@@ -514,15 +921,16 @@ final class AndroidStorageManager {
                                 throw new IOException(
                                         "The archive exceeds its uncompressed size limit.");
                             }
-                            long maximumEntryBytes = ownedDataArchive
-                                    ? DATA_ARCHIVE_MAX_ENTRY_BYTES
-                                    : STATE_ARCHIVE_MAX_BYTES;
+                            long maximumEntryBytes = kind == ArchiveKind.STATE
+                                    ? STATE_ARCHIVE_MAX_BYTES
+                                    : DATA_ARCHIVE_MAX_ENTRY_BYTES;
                             if (entryBytes > maximumEntryBytes) {
                                 throw new IOException(
                                         "An archive entry exceeds its size limit: " + name);
                             }
                             if ((DATA_MANIFEST_NAME.equals(name)
-                                    || STATE_MANIFEST_NAME.equals(name))
+                                    || STATE_MANIFEST_NAME.equals(name)
+                                    || MOD_ARCHIVE_MANIFEST.equals(name))
                                     && entryBytes > ARCHIVE_MANIFEST_MAX_BYTES) {
                                 throw new IOException(
                                         "The archive manifest exceeds 1 MiB.");

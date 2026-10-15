@@ -53,11 +53,13 @@ including touch controls and physical-controller support.
 - Owned DLC entitlement transfer from Steam cached app tickets or GOG/DRM-free
   license keys.
 - Portable save/settings export and import from the main menu.
+- Mods and translations through Barony's mod menu, installed from Steam
+  Workshop subscriptions or mod ZIPs via **Data & Saves**.
 
 Direct LAN hosting, discovery, and joining are available on the same local
 network. Internet matchmaking and multiplayer services, Steamworks, EOS,
-PlayFab, achievements, workshop integration, and public-store packaging are
-not currently supported.
+PlayFab, achievements, in-app Steam Workshop browsing, and public-store
+packaging are not currently supported.
 
 GPU compatibility testing is ongoing. Use the normal beta for general testing;
 focused prereleases on the releases page are intended for the affected devices

@@ -11358,7 +11358,7 @@ bool Mods::verifyMapFiles(const char* folder, bool ignoreBaseFolder)
 	{
 		const std::string mapPath = "maps/" + f;
 		auto path = PHYSFS_getRealDir(mapPath.c_str());
-		if ( path && ignoreBaseFolder && !strcmp(path, "./") )
+		if ( path && ignoreBaseFolder && !strcmp(path, BASE_DATA_REAL_DIR) )
 		{
 			continue;
 		}
@@ -11383,7 +11383,7 @@ bool Mods::verifyMapFiles(const char* folder, bool ignoreBaseFolder)
 				bool fileExistsInTable = false;
 				if ( !verifyMapHash(fullMapPath.c_str(), maphash, &fileExistsInTable) )
 				{
-					if ( fileExistsInTable || strcmp(path, "./") ) 
+					if ( fileExistsInTable || strcmp(path, BASE_DATA_REAL_DIR) ) 
 					{
 						// return false if map exists in map hash table, or if hash check failed and mod folder contains an unknown map
 						return false;
@@ -11937,7 +11937,7 @@ void Mods::loadMods()
 	doLoadingScreen();
 
 	std::string langDirectory = PHYSFS_getRealDir("lang/en.txt");
-	if ( langDirectory.compare("./") != 0 )
+	if ( langDirectory.compare(BASE_DATA_REAL_DIR) != 0 )
 	{
 		if ( Language::reloadLanguage() != 0 )
 		{
@@ -12081,6 +12081,9 @@ void Mods::writeLevelsTxtAndPreview(std::string modFolder)
 		}
 
 		std::string srcImage = datadir;
+#ifdef ANDROID
+		srcImage.append("/"); // Android's datadir is an absolute path without a trailing slash.
+#endif
 		srcImage.append("images/system/preview.png");
 		std::string dstImage = path + "/preview.png";
 		if ( access(srcImage.c_str(), F_OK) == 0 )

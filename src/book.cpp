@@ -945,7 +945,7 @@ bool physfsSearchBooksToUpdate()
 			if ( PHYSFS_getRealDir(bookFilename.c_str()) != nullptr )
 			{
 				std::string bookDir = PHYSFS_getRealDir(bookFilename.c_str());
-				if ( bookDir.compare("./") != 0 )
+				if ( bookDir.compare(BASE_DATA_REAL_DIR) != 0 )
 				{
 					// found a book not belonging in the base path.
 					printlog("[PhysFS]: Found modified book in books/ directory, reloading all books...");

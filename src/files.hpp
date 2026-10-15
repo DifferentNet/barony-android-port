@@ -287,6 +287,15 @@ extern ConsoleVariable<bool> cvar_disableHoliday;
 
 extern char datadir[PATH_MAX]; //PATH_MAX as defined in main.hpp -- maybe define in Config.hpp?
 extern char outputdir[PATH_MAX];
+
+// PhysFS mount string of the base data folder, as returned by
+// PHYSFS_getRealDir() for unmodded files. Desktop builds mount "./";
+// Android mounts its absolute runtime data path.
+#ifdef ANDROID
+#define BASE_DATA_REAL_DIR datadir
+#else
+#define BASE_DATA_REAL_DIR "./"
+#endif
 void glLoadTexture(SDL_Surface* image, int texnum);
 SDL_Surface* loadImage(char const * const filename);
 voxel_t* loadVoxel(char* filename2);

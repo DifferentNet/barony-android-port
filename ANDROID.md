@@ -217,6 +217,49 @@ external keyboard and an external mouse (for example over Bluetooth) hides the
 touch overlay, just like a gamepad; disconnecting either one restores it. Mouse
 clicks always go to the game, never to on-screen buttons.
 
+## Mods and translations
+
+Barony's own mod menu works on Android: choose **Play Modded Game**, select
+**Load Mod** for each mod you want, then **Start Modded Game**. Community
+translations are ordinary mods and work the same way.
+
+Mods live in the app's private storage, so they are installed from a ZIP:
+
+1. Get a mod ZIP:
+   - **Steam Workshop or local PC mods:** subscribe to mods in Barony's Steam
+     Workshop (or put them in `Barony\mods` on the PC), then run the archive
+     builder with `-Mods`:
+
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File .\Barony-Android-Data-Archive-Builder-5.0.2.ps1 -Mods
+     ```
+
+     It creates `Barony-Android-Mods.zip` with every subscribed and local mod.
+     Workshop mods are named after their Workshop titles, which the builder
+     looks up through Steam's public web API (only the item IDs are sent).
+     Add `-NoWorkshopTitles` to skip the lookup, or `-ModName "Title*"` to
+     include only matching mods (separate several names with commas).
+   - **A mod downloaded as a ZIP:** use it directly. The ZIP may contain the
+     mod's files at its root (the mod is named after the ZIP file) or one or
+     more mod folders.
+2. Copy the ZIP to the device. On Barony's main menu, open **Data & Saves**,
+   choose **Import mods**, and pick the ZIP.
+3. Choose **Exit now**, then open the port again. The mods are installed before
+   Barony starts.
+
+To uninstall mods, use **Data & Saves** > **Remove mods**, then exit and reopen
+the port.
+
+Notes:
+
+- One import may contain up to 2 GB of mods, with no single file larger than
+  256 MB.
+- Barony keeps modded runs separate: they use their own save files and mark
+  the run as modded.
+- For LAN games, every player must load the same mods by hand.
+- Browsing and subscribing to the Steam Workshop isn't available on the device.
+- Mods belong to their authors. Keep the generated ZIP for your own devices.
+
 ## Experimental LAN multiplayer
 
 Beta 8 enables Barony's direct LAN host and lobby-browser paths on Android.
@@ -263,8 +306,9 @@ configuration, credentials, or other private commercial data to an issue.
 
 - Offline single-player remains the most broadly tested mode; direct LAN
   multiplayer is experimental.
-- Internet matchmaking, Steamworks, EOS, PlayFab, achievements, workshop
-  integration, and voice chat are disabled.
+- Internet matchmaking, Steamworks, EOS, PlayFab, achievements, in-app Steam
+  Workshop browsing, and voice chat are disabled. Mods are installed from ZIP
+  archives instead (see [Mods and translations](#mods-and-translations)).
 - Controller glyph selection has not been verified across a broad range of controller models.
 - Steam DLC entitlement transfer depends on a locally cached Steam app ticket;
   launch the PC version once before rebuilding the data archive if an owned pack

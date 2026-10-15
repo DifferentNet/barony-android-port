@@ -3,6 +3,9 @@ param(
     [string]$SourcePath,
     [string]$OutputPath,
     [switch]$IncludeHolidayThemes,
+    [switch]$Mods,
+    [string[]]$ModName,
+    [switch]$NoWorkshopTitles,
     [switch]$Force
 )
 
@@ -159,6 +162,328 @@ function Test-SteamCachedAppTicket {
     return $false
 }
 
+$BaronyWorkshopAppId = '371970'
+$ModManifestName = '.barony-android-mods.json'
+$ModContentNames = @(
+    'books', 'data', 'editor', 'fonts', 'images', 'items', 'lang',
+    'maps', 'models', 'music', 'sound', 'preview.png'
+)
+$ModArchiveMaxFiles = 100000
+$ModArchiveMaxBytes = [long]2 * 1024 * 1024 * 1024
+$ModEntryMaxBytes = [long]256 * 1024 * 1024
+$ModFolderNameMaxLength = 64
+
+function Test-LooksLikeBaronyMod {
+    param([Parameter(Mandatory)][string]$Path)
+
+    foreach ($Child in @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue)) {
+        if ($ModContentNames -contains $Child.Name.ToLowerInvariant()) {
+            return $true
+        }
+    }
+    return $false
+}
+
+# Matches the Android importer: Barony lists mods by folder name.
+function ConvertTo-ModFolderName {
+    param([Parameter(Mandatory)][string]$Name)
+
+    $Clean = [regex]::Replace($Name, '[^A-Za-z0-9 _\-\.\(\)]', '_')
+    $Clean = [regex]::Replace($Clean, '_{2,}', '_').Trim()
+    $Clean = $Clean.TrimStart('.')
+    $Clean = [regex]::Replace($Clean, '[ \.]+$', '')
+    if ($Clean.Length -gt $ModFolderNameMaxLength) {
+        $Clean = $Clean.Substring(0, $ModFolderNameMaxLength).Trim()
+    }
+    if (-not $Clean) {
+        return 'Mod'
+    }
+    return $Clean
+}
+
+function Get-WorkshopTitles {
+    param([string[]]$Ids)
+
+    $Titles = @{}
+    if (-not $Ids -or $Ids.Count -eq 0) {
+        return $Titles
+    }
+    # Steam's public endpoint needs no account or key; only the item IDs are sent.
+    $Body = @{ itemcount = $Ids.Count }
+    for ($Index = 0; $Index -lt $Ids.Count; $Index++) {
+        $Body["publishedfileids[$Index]"] = $Ids[$Index]
+    }
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = `
+            [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $Response = Invoke-RestMethod `
+            -Method Post `
+            -Uri 'https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/' `
+            -Body $Body `
+            -TimeoutSec 20 `
+            -UseBasicParsing
+        foreach ($Item in @($Response.response.publishedfiledetails)) {
+            $TitleProperty = $Item.PSObject.Properties['title']
+            if ($TitleProperty -and $TitleProperty.Value) {
+                $Titles[[string]$Item.publishedfileid] = [string]$TitleProperty.Value
+            }
+        }
+    }
+    catch {
+        Write-Warning ("Could not look up Steam Workshop titles: $($_.Exception.Message) " +
+            'Workshop mods will be named by their Workshop ID.')
+    }
+    return $Titles
+}
+
+function New-BaronyModArchive {
+    param(
+        [Parameter(Mandatory)][string]$InstallPath,
+        [Parameter(Mandatory)][string]$ArchivePath,
+        [string[]]$NamePatterns,
+        [switch]$SkipTitleLookup
+    )
+
+    # "powershell -File" passes -ModName 'A','B' as the single string "A,B".
+    $NamePatterns = @(
+        $NamePatterns |
+            ForEach-Object { $_ -split ',' } |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ }
+    )
+
+    $Candidates = [System.Collections.Generic.List[object]]::new()
+    $LocalModsPath = Join-Path $InstallPath 'mods'
+    if (Test-Path -LiteralPath $LocalModsPath -PathType Container) {
+        foreach ($Directory in @(Get-ChildItem -LiteralPath $LocalModsPath -Directory -Force)) {
+            $Candidates.Add([pscustomobject]@{
+                Path = $Directory.FullName
+                Source = 'local'
+                WorkshopId = ''
+                Title = $Directory.Name
+            })
+        }
+    }
+
+    $WorkshopRoots = [System.Collections.Generic.List[string]]::new()
+    if ($InstallPath -match '(?i)[\\/]steamapps[\\/]common[\\/]') {
+        $WorkshopRoots.Add([IO.Path]::GetFullPath((Join-Path $InstallPath (
+            "..\..\workshop\content\$BaronyWorkshopAppId"))))
+    }
+    foreach ($SteamRoot in @(Get-SteamRootCandidates -InstallPath $InstallPath)) {
+        $WorkshopRoots.Add((Join-Path $SteamRoot "steamapps\workshop\content\$BaronyWorkshopAppId"))
+    }
+    $WorkshopIds = [System.Collections.Generic.List[string]]::new()
+    foreach ($WorkshopRoot in @($WorkshopRoots | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $WorkshopRoot -PathType Container)) {
+            continue
+        }
+        foreach ($Directory in @(Get-ChildItem -LiteralPath $WorkshopRoot -Directory -Force)) {
+            if ($Directory.Name -notmatch '^\d+$' -or $WorkshopIds.Contains($Directory.Name)) {
+                continue
+            }
+            $WorkshopIds.Add($Directory.Name)
+            $Candidates.Add([pscustomobject]@{
+                Path = $Directory.FullName
+                Source = 'workshop'
+                WorkshopId = $Directory.Name
+                Title = $Directory.Name
+            })
+        }
+    }
+
+    if ($WorkshopIds.Count -gt 0 -and -not $SkipTitleLookup) {
+        $Titles = Get-WorkshopTitles -Ids @($WorkshopIds)
+        foreach ($Candidate in $Candidates) {
+            if ($Candidate.WorkshopId -and $Titles.ContainsKey($Candidate.WorkshopId)) {
+                $Candidate.Title = $Titles[$Candidate.WorkshopId]
+            }
+        }
+    }
+
+    $Selected = [System.Collections.Generic.List[object]]::new()
+    foreach ($Candidate in $Candidates) {
+        if ($NamePatterns -and $NamePatterns.Count -gt 0) {
+            $Matched = $false
+            foreach ($Pattern in $NamePatterns) {
+                if ($Candidate.Title -like $Pattern -or $Candidate.WorkshopId -like $Pattern `
+                        -or (Split-Path -Leaf $Candidate.Path) -like $Pattern) {
+                    $Matched = $true
+                }
+            }
+            if (-not $Matched) {
+                continue
+            }
+        }
+        $Item = Get-Item -LiteralPath $Candidate.Path -Force
+        if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            Write-Warning "Skipping a linked folder: $($Candidate.Path)"
+            continue
+        }
+        if (-not (Test-LooksLikeBaronyMod -Path $Candidate.Path)) {
+            Write-Warning "Skipping a folder that doesn't look like a Barony mod: $($Candidate.Path)"
+            continue
+        }
+        $Selected.Add($Candidate)
+    }
+    if ($Selected.Count -eq 0) {
+        throw ('No Barony mods were found. Subscribe to mods in the Steam Workshop or put ' +
+            "them in $LocalModsPath, or check the -ModName filter.")
+    }
+
+    $UsedNames = [System.Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+    $Entries = [System.Collections.Generic.List[object]]::new()
+    $ManifestMods = [System.Collections.Generic.List[object]]::new()
+    $TotalBytes = [long]0
+    foreach ($Mod in $Selected) {
+        $Folder = ConvertTo-ModFolderName -Name $Mod.Title
+        if (-not $UsedNames.Add($Folder)) {
+            $Suffix = if ($Mod.WorkshopId) { $Mod.WorkshopId } else { '2' }
+            $Folder = ConvertTo-ModFolderName -Name "$Folder ($Suffix)"
+            $Counter = 3
+            while (-not $UsedNames.Add($Folder)) {
+                $Folder = ConvertTo-ModFolderName -Name "$($Mod.Title) ($Counter)"
+                $Counter++
+            }
+        }
+        $ModPrefix = $Mod.Path.TrimEnd('\') + '\'
+        foreach ($File in @(Get-ChildItem -LiteralPath $Mod.Path -Recurse -File -Force)) {
+            if (($File.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Symbolic links and reparse points are not supported: $($File.FullName)"
+            }
+            $Relative = $File.FullName.Substring($ModPrefix.Length).Replace('\', '/')
+            $Lower = $Relative.ToLowerInvariant()
+            if ($Lower -eq 'models.cache' -or $Lower.EndsWith('/models.cache')) {
+                continue
+            }
+            if ($File.Length -gt $ModEntryMaxBytes) {
+                throw "A mod file is larger than the Android importer accepts (256 MB): $($File.FullName)"
+            }
+            $TotalBytes += $File.Length
+            $Entries.Add([pscustomobject]@{ Name = "$Folder/$Relative"; File = $File })
+        }
+        $ManifestMods.Add([ordered]@{
+            folder = $Folder
+            title = $Mod.Title
+            source = $Mod.Source
+            workshopId = $Mod.WorkshopId
+        })
+        $Label = if ($Mod.Source -eq 'workshop') { "Workshop $($Mod.WorkshopId)" } else { 'local mod' }
+        Write-Host "Including mod: $Folder ($Label)"
+    }
+    if ($Entries.Count -gt $ModArchiveMaxFiles) {
+        throw "The selected mods contain more than $ModArchiveMaxFiles files."
+    }
+    if ($TotalBytes -gt $ModArchiveMaxBytes) {
+        throw 'The selected mods are larger than 2 GB. Use -ModName to pick fewer mods.'
+    }
+
+    $Manifest = [ordered]@{
+        schemaVersion = 1
+        createdAtUtc = [DateTime]::UtcNow.ToString('o')
+        builder = 'windows-archive-builder-v3'
+        mods = @($ManifestMods)
+    }
+    $ManifestBytes = [Text.Encoding]::UTF8.GetBytes(($Manifest | ConvertTo-Json -Depth 4))
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $PartialPath = "$ArchivePath.partial"
+    if (Test-Path -LiteralPath $PartialPath) {
+        Remove-Item -LiteralPath $PartialPath -Force
+    }
+    if (Test-Path -LiteralPath $ArchivePath) {
+        Remove-Item -LiteralPath $ArchivePath -Force
+    }
+    $ArchiveStream = $null
+    $Archive = $null
+    try {
+        $ArchiveStream = [IO.File]::Open(
+            $PartialPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        $Archive = [IO.Compression.ZipArchive]::new(
+            $ArchiveStream, [IO.Compression.ZipArchiveMode]::Create, $true)
+        $ManifestEntry = $Archive.CreateEntry($ModManifestName, [IO.Compression.CompressionLevel]::Optimal)
+        $ManifestStream = $ManifestEntry.Open()
+        try {
+            $ManifestStream.Write($ManifestBytes, 0, $ManifestBytes.Length)
+        }
+        finally {
+            $ManifestStream.Dispose()
+        }
+        $Index = 0
+        foreach ($Item in $Entries) {
+            $Entry = $Archive.CreateEntry($Item.Name, [IO.Compression.CompressionLevel]::Optimal)
+            $Entry.LastWriteTime = $Item.File.LastWriteTimeUtc
+            $EntryStream = $Entry.Open()
+            $InputStream = [IO.File]::OpenRead($Item.File.FullName)
+            try {
+                $InputStream.CopyTo($EntryStream)
+            }
+            finally {
+                $InputStream.Dispose()
+                $EntryStream.Dispose()
+            }
+            $Index++
+            if (($Index % 250) -eq 0 -or $Index -eq $Entries.Count) {
+                Write-Progress -Activity 'Creating Barony Android mod archive' `
+                    -Status "$Index / $($Entries.Count) files" `
+                    -PercentComplete (($Index * 100) / $Entries.Count)
+            }
+        }
+    }
+    finally {
+        Write-Progress -Activity 'Creating Barony Android mod archive' -Completed
+        if ($Archive) {
+            $Archive.Dispose()
+        }
+        if ($ArchiveStream) {
+            $ArchiveStream.Dispose()
+        }
+    }
+
+    try {
+        $VerifyStream = [IO.File]::OpenRead($PartialPath)
+        $VerifyArchive = [IO.Compression.ZipArchive]::new(
+            $VerifyStream, [IO.Compression.ZipArchiveMode]::Read, $false)
+        try {
+            if ($VerifyArchive.Entries.Count -ne ($Entries.Count + 1)) {
+                throw 'Mod archive file count mismatch after creation.'
+            }
+            if (-not $VerifyArchive.GetEntry($ModManifestName)) {
+                throw 'Mod archive manifest is missing after creation.'
+            }
+        }
+        finally {
+            $VerifyArchive.Dispose()
+            $VerifyStream.Dispose()
+        }
+        Move-Item -LiteralPath $PartialPath -Destination $ArchivePath -Force
+    }
+    catch {
+        if (Test-Path -LiteralPath $PartialPath) {
+            Remove-Item -LiteralPath $PartialPath -Force
+        }
+        throw
+    }
+
+    $ArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ArchivePath).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText(
+        "$ArchivePath.sha256",
+        "$ArchiveHash  $([IO.Path]::GetFileName($ArchivePath))`n",
+        (New-Object Text.UTF8Encoding($false)))
+
+    Write-Host ''
+    Write-Host "Mod archive: $ArchivePath"
+    Write-Host "SHA-256: $ArchiveHash"
+    Write-Host "Mods: $($ManifestMods.Count)"
+    Write-Host "Files: $($Entries.Count)"
+    Write-Host "Uncompressed data: $TotalBytes bytes"
+    Write-Host ''
+    Write-Host 'Copy the ZIP to the Android device, open Data & Saves on the main menu,'
+    Write-Host 'and choose Import mods. Mods belong to their authors; do not share this ZIP.'
+}
+
 if (-not $SourcePath) {
     $Detected = @(
         Get-BaronyInstallCandidates |
@@ -191,6 +516,26 @@ elseif ($SourcePath -match '(?i)gog') {
 }
 else {
     'custom'
+}
+
+if ($Mods) {
+    if (-not $OutputPath) {
+        $OutputPath = Join-Path (Get-Location) 'Barony-Android-Mods.zip'
+    }
+    $OutputPath = [IO.Path]::GetFullPath($OutputPath)
+    if ((Test-Path -LiteralPath $OutputPath) -and -not $Force) {
+        throw "Output already exists. Use -Force to replace it: $OutputPath"
+    }
+    $ModOutputDirectory = Split-Path -Parent $OutputPath
+    if (-not (Test-Path -LiteralPath $ModOutputDirectory -PathType Container)) {
+        New-Item -ItemType Directory -Path $ModOutputDirectory -Force | Out-Null
+    }
+    New-BaronyModArchive `
+        -InstallPath $SourcePath `
+        -ArchivePath $OutputPath `
+        -NamePatterns $ModName `
+        -SkipTitleLookup:$NoWorkshopTitles
+    return
 }
 
 if (-not $OutputPath) {

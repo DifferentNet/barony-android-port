@@ -10,15 +10,19 @@ The APK is code-only. It does not contain the commercial Barony game data, so ev
 - 64-bit ARM device (`arm64-v8a`).
 - OpenGL ES 3.0 or newer.
 - Landscape orientation.
-- Offline single-player and experimental direct LAN multiplayer.
-- Physical gamepad, mouse and keyboard, or on-screen touch controls.
+- Phones, tablets, and 64-bit Android TV / Google TV devices.
+- Offline single-player, local split-screen co-op for up to four players, and
+  experimental direct LAN multiplayer.
+- Physical gamepad, mouse and keyboard, on-screen touch controls, or a TV
+  remote for menus.
 
 Beta 8 and earlier were tested on a Samsung Galaxy S24 Ultra / Adreno 750
 with a GameSir G8 controller. Affected-device testers also confirmed the
 mobile framebuffer compatibility path on a Galaxy Note 9 / Mali-G72 and a
-Poco F7 / Adreno 825. Beta 9 and Beta 10 were verified on an Android 15
-emulator, including the ARM64 build under ARM translation, so reports from
-physical devices are especially welcome.
+Poco F7 / Adreno 825. Beta 9 through Beta 11 were verified on an Android 15
+phone emulator, and Beta 11's TV support on an Android 16 Google TV emulator,
+including the ARM64 build under ARM translation. Reports from physical phones,
+tablets, and TVs are especially welcome.
 
 ## Install a release
 
@@ -220,7 +224,10 @@ touch overlay, just like a gamepad; disconnecting either one restores it. Mouse
 clicks always go to the game, never to on-screen buttons.
 
 Local split-screen co-op works with up to four gamepads: choose
-**Local Adventure** and have each player press **A** to join.
+**Local Adventure** and have each player press **A** to join. The screen splits
+top and bottom for two players and into quarters for three or four; Barony's
+**Vertical Splitscreen** setting puts two players side by side. If several
+views run slowly, lower **Render Resolution** to 720p.
 
 ## Android TV and Google TV
 
@@ -233,7 +240,11 @@ is hidden and the remote drives Barony's menus: the arrows move, **OK**
 selects, **Back** cancels, and **Menu** opens the pause menu. With a gamepad
 connected, the gamepad takes over and the remote's **Back** acts as Escape.
 
-TVs have no document picker, so data is installed with **Receive from PC**.
+Many TVs ship without Android's document picker, so on a TV the first-run data
+screen offers **Receive from PC** instead of **Import archive**, and
+**Data & Saves** lists only **Receive from PC (Wi-Fi)** and **Remove mods**.
+Game data, mods, and save backups exported on a phone or tablet all arrive
+through **Receive from PC**.
 
 ## Receive from PC
 
@@ -364,6 +375,12 @@ issue.
 - Barony reads some mod data files into fixed-size buffers, so a mod with an
   unusually large data file may load only partly. Barony logs a JSON error
   and skips that file, as on desktop.
+- Android TV support and local split-screen co-op have been tested on
+  emulators only so far.
+- On a TV, saves can be received but not exported, because the export uses
+  the document picker.
+- **Receive from PC** sends files over plain HTTP on the local network. Use it
+  on a network you trust, such as your home Wi-Fi.
 
 ## Build from source
 

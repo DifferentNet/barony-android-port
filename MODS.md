@@ -65,6 +65,12 @@ file) or one or more mod folders.
 To import several ZIPs, tap **Later** after each one and **Exit now** after the
 last.
 
+**No cable, or playing on a TV?** Choose **Data & Saves** >
+**Receive from PC (Wi-Fi)** instead. The device shows an address and a 6-digit
+code; open the address in a web browser on the PC, enter the code, and send
+`Barony-Android-Mods.zip`. Then continue with step 4. On a TV this is the only
+way to add mods; see the [TV guide](TV.md).
+
 ## Step 3: play with mods
 
 1. On the main menu, choose **Play Modded Game**.

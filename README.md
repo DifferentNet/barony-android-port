@@ -21,7 +21,8 @@ The current normal prerelease is
 [Barony Android Port 5.0.2 Beta 11](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-beta11).
 Run the builder on a Windows PC with an owned Steam or GOG Barony v5.0.2
 installation, copy the generated ZIP to the Android device, then select
-**Import archive** when the port starts. The ZIP remains the user's private
+**Import archive** when the port starts. On a TV, select **Receive from PC**
+and send the ZIP from a PC browser instead. The ZIP remains the user's private
 commercial data and must not be shared.
 
 Beta 4 users who want to enable owned DLC must download the archive builder

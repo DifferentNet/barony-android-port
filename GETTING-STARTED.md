@@ -66,39 +66,24 @@ Halloween and Christmas looks. This makes the ZIP about 170 MB bigger.
 The game starts. You can delete the ZIP from the phone afterwards if you want
 the space back.
 
-**No USB cable?** Tap **Receive from PC** in **Data & Saves** (or on the first
-screen on a TV) and send the ZIP over Wi-Fi instead, as described in the next
-section.
+**No USB cable?** Any way of getting the ZIP onto the phone works. The file
+picker in step 5 can also open it from Google Drive or another cloud storage
+app. Later, **Data & Saves** > **Receive from PC (Wi-Fi)** can receive mods and
+save backups straight from a PC browser.
 
-## Playing on a TV (Android TV / Google TV)
+## Playing on a TV
 
-Barony also runs on Android TV and Google TV boxes, such as Chromecast with
-Google TV or NVIDIA Shield, with a gamepad or the TV remote.
+Barony also runs on 64-bit Android TV and Google TV devices, such as NVIDIA
+Shield TV. Follow the step-by-step [TV guide](TV.md): it covers installing the
+app on the TV, sending the game data from the PC over Wi-Fi, and the remote's
+controls.
 
-1. Install the APK on the TV. One way is a file-sharing app such as
-   *Send Files to TV*; another is ADB over the network.
-2. Start **Barony Android Port** from the TV's app list. It shows
-   **Barony game data required**.
-3. Choose **Receive from PC**. The TV shows an address such as
-   `http://192.168.1.40:8765` and a 6-digit code.
-4. On a PC on the same network, open that address in a web browser, enter
-   the code, choose your `Barony-Android-Data-5.0.2.zip`, and click **Send**.
-5. Keep the TV screen open until the transfer finishes. The TV then installs
-   the data, and you tap **Continue**.
-
-The same **Receive from PC** option in **Data & Saves** also accepts mod ZIPs
-and save backups. The TV only listens while that screen is open, and stops
-after one file, after **Cancel**, or after five wrong codes.
-
-On a TV, the remote's arrows move, **OK** selects, **Back** goes back, and
-**Menu** pauses. A gamepad is still the best way to play.
-
-### Couch co-op
+## Couch co-op
 
 Connect up to four gamepads, choose **Play Game** > **New** >
-**Local Adventure**, and have each player press **A** on their controller to
+**Local Adventure**, and have each player press **A** on their own gamepad to
 join. The screen splits so every player gets their own view. This works on
-phones and tablets too.
+phones, tablets, and TVs.
 
 ## Controls
 

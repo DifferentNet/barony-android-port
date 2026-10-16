@@ -12,12 +12,13 @@ based on the official Barony v5.0.2 source at
 The Android package contains engine code and open-source dependency notices only. It does not contain Barony maps, models, music, sounds, DLC, or other commercial game data. A purchased Barony v5.0.2 PC installation is required.
 
 **New to the port? Follow the step-by-step [Getting started guide](GETTING-STARTED.md).**
-To add mods or translations, see the [mods guide](MODS.md).
+To add mods or translations, see the [mods guide](MODS.md). To play on a TV,
+see the [TV guide](TV.md).
 
 Download the APK and owned-data archive builder from the
 [GitHub releases page](https://github.com/DifferentNet/barony-android-port/releases).
 The current normal prerelease is
-[Barony Android Port 5.0.2 Beta 10](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-beta10).
+[Barony Android Port 5.0.2 Beta 11](https://github.com/DifferentNet/barony-android-port/releases/tag/5.0.2-android-beta11).
 Run the builder on a Windows PC with an owned Steam or GOG Barony v5.0.2
 installation, copy the generated ZIP to the Android device, then select
 **Import archive** when the port starts. The ZIP remains the user's private
@@ -26,7 +27,7 @@ commercial data and must not be shared.
 Beta 4 users who want to enable owned DLC must download the archive builder
 from Beta 5 or newer, create a new owned-data ZIP, and import it through
 **Data & Saves**. Archives created with the older builder do not contain the
-DLC entitlement transfer file. Beta 5 archives remain compatible with Beta 10
+DLC entitlement transfer file. Beta 5 archives remain compatible with Beta 11
 and do not need to be rebuilt.
 
 See [ANDROID.md](ANDROID.md) for checksum verification, installation
@@ -57,7 +58,8 @@ including touch controls and physical-controller support.
 - Portable save/settings export and import from the main menu.
 - Optional Halloween and winter-holiday themes.
 - Up to four-player local split-screen co-op with gamepads.
-- Android TV and Google TV support with remote navigation.
+- Android TV and Google TV support with remote navigation
+  ([TV guide](TV.md)).
 - **Receive from PC:** send game data, mods, or saves from a web browser over
   Wi-Fi, no cable or file manager needed.
 - Mods and translations through Barony's mod menu, installed from Steam

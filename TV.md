@@ -110,9 +110,12 @@ If the game runs slowly with several players, open **Settings** and lower
 **Data & Saves** > **Receive from PC (Wi-Fi)** also accepts:
 
 - mod ZIPs made with the archive builder's `-Mods` option (see the
-  [mods guide](MODS.md)), and
-- save backups exported from Barony Android Port on a phone or tablet. This is
-  how you move a run from your phone to the TV.
+  [mods guide](MODS.md));
+- save backups exported from Barony Android Port on a phone or tablet, to move
+  a run from your phone to the TV;
+- your PC saves, packed with the archive builder's `-Saves` option (Beta 12 or
+  newer; see
+  [Bring your PC saves](GETTING-STARTED.md#bring-your-pc-saves-optional)).
 
 The TV recognizes what you sent and installs it. After mods or saves, choose
 **Exit now** and open the game again.

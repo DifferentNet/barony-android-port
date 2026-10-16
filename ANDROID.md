@@ -204,6 +204,20 @@ From the root Barony main menu, select **Data & Saves**:
 Save imports reject traversal paths, unexpected files, manifest mismatches,
 modified payloads, more than 512 files, and payloads larger than 64 MiB.
 
+To bring saves from a Windows PC, run the archive builder (Beta 12 or newer)
+with `-Saves`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Barony-Android-Data-Archive-Builder-5.0.2.ps1 -Saves
+```
+
+It packs the installation's `savegames\` and `config\` folders into
+`Barony-Android-Saves-from-PC.zip` in the same format as
+**Export saves and settings**, so **Import saves and settings** and
+**Receive from PC** both accept it. Add `-NoConfig` to leave out the settings.
+Imported files replace files with the same names on the device; other saves
+stay. Android keeps its own render-resolution and frame-rate presets.
+
 Barony uses one-shot checkpoints. Loading an adventure consumes its current checkpoint, and the replacement checkpoint is written at a later dungeon-level boundary. Do not test save persistence by loading a valuable adventure and immediately quitting to the main menu.
 
 ## Controls
@@ -453,9 +467,10 @@ Create a validated owned-data archive directly from a source checkout:
 Pass `-SourcePath` for a non-default Steam/GOG installation and `-OutputPath`
 to choose the ZIP destination. Add `-IncludeHolidayThemes` to include the
 optional seasonal themes. `-Mods` builds a mod archive instead (see
-[Mods and translations](#mods-and-translations)). Generated owned-data and mod
-archives are private user artifacts and must never be committed or attached
-to a public release.
+[Mods and translations](#mods-and-translations)), and `-Saves` a save archive
+(see [Updating and saves](#updating-and-saves)). Generated owned-data, mod,
+and save archives are private user artifacts and must never be committed or
+attached to a public release.
 
 ## Physical-device regression
 

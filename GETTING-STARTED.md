@@ -103,6 +103,31 @@ In short: run the builder with `-Mods` on the PC, import the ZIP from
 **Data & Saves** > **Import mods**, then load the mods in **Play Modded Game**.
 Follow the step-by-step [mods guide](MODS.md).
 
+## Bring your PC saves (optional)
+
+You can continue your PC runs on Android. You need the archive builder from
+Beta 12 or newer.
+
+1. On the PC, open your **Downloads** folder in Terminal as in Part 1 and run
+   the builder with `-Saves`:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\Barony-Android-Data-Archive-Builder-5.0.2.ps1 -Saves
+   ```
+
+   Your **Downloads** folder now contains
+   **`Barony-Android-Saves-from-PC.zip`** with your saves and settings. Add
+   `-NoConfig` to copy only the saves and keep your Android settings.
+2. Copy the ZIP to the phone. On the main menu, open **Data & Saves** >
+   **Import saves and settings** and pick it. No cable? Use
+   **Data & Saves** > **Receive from PC (Wi-Fi)** instead.
+3. Choose **Exit now** and open the game again. Your runs appear under
+   **Play Game** > **Continue**.
+
+Saves on the phone with the same names (the same save slots) are replaced, so
+use **Export saves and settings** first if you have runs there that you want to
+keep. A run you started with mods needs the same mods on the phone.
+
 ## Updating to a new version
 
 Download the new APK and install it over the old one. **Don't uninstall the

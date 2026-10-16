@@ -6,6 +6,8 @@ param(
     [switch]$Mods,
     [string[]]$ModName,
     [switch]$NoWorkshopTitles,
+    [switch]$Saves,
+    [switch]$NoConfig,
     [switch]$Force
 )
 
@@ -172,6 +174,12 @@ $ModArchiveMaxFiles = 100000
 $ModArchiveMaxBytes = [long]2 * 1024 * 1024 * 1024
 $ModEntryMaxBytes = [long]256 * 1024 * 1024
 $ModFolderNameMaxLength = 64
+
+# Matches the Android save importer (Data & Saves > Import saves and settings).
+$StateArchivePackageName = 'com.zhdan.baronyport'
+$StateArchiveMaxFiles = 512
+$StateArchiveMaxBytes = [long]64 * 1024 * 1024
+$StateSkippedFileNames = @('steam_autocloud.vdf')
 
 function Test-LooksLikeBaronyMod {
     param([Parameter(Mandatory)][string]$Path)
@@ -484,6 +492,156 @@ function New-BaronyModArchive {
     Write-Host 'and choose Import mods. Mods belong to their authors; do not share this ZIP.'
 }
 
+function New-BaronySaveArchive {
+    param(
+        [Parameter(Mandatory)][string]$InstallPath,
+        [Parameter(Mandatory)][string]$ArchivePath,
+        [switch]$SkipConfig
+    )
+
+    # On Windows, Barony keeps saves and settings next to the game.
+    $Folders = @('savegames')
+    if (-not $SkipConfig) {
+        $Folders += 'config'
+    }
+    $Entries = [System.Collections.Generic.List[object]]::new()
+    $TotalBytes = [long]0
+    foreach ($Folder in $Folders) {
+        $FolderPath = Join-Path $InstallPath $Folder
+        if (-not (Test-Path -LiteralPath $FolderPath -PathType Container)) {
+            continue
+        }
+        $FolderPrefix = $FolderPath.TrimEnd('\') + '\'
+        foreach ($File in @(Get-ChildItem -LiteralPath $FolderPath -Recurse -File -Force)) {
+            if (($File.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Symbolic links and reparse points are not supported: $($File.FullName)"
+            }
+            if ($StateSkippedFileNames -contains $File.Name) {
+                continue
+            }
+            $Relative = $File.FullName.Substring($FolderPrefix.Length).Replace('\', '/')
+            $TotalBytes += $File.Length
+            $Entries.Add([pscustomobject]@{ Name = "$Folder/$Relative"; File = $File })
+        }
+    }
+    if (-not ($Entries | Where-Object { $_.Name.StartsWith('savegames/') })) {
+        throw "No Barony saves were found in $(Join-Path $InstallPath 'savegames')."
+    }
+    if ($Entries.Count -gt $StateArchiveMaxFiles) {
+        throw "The saves contain more than $StateArchiveMaxFiles files, which the Android importer rejects."
+    }
+    if ($TotalBytes -gt $StateArchiveMaxBytes) {
+        throw 'The saves are larger than 64 MB, which the Android importer rejects.'
+    }
+
+    $Hashes = [ordered]@{}
+    foreach ($Item in $Entries) {
+        $Hashes[$Item.Name] = (
+            Get-FileHash -Algorithm SHA256 -LiteralPath $Item.File.FullName
+        ).Hash.ToLowerInvariant()
+    }
+    $Manifest = [ordered]@{
+        schemaVersion = 1
+        packageName = $StateArchivePackageName
+        createdAtUtc = [DateTime]::UtcNow.ToString('o')
+        builder = 'windows-archive-builder-v3'
+        files = $Hashes
+    }
+    $ManifestBytes = [Text.Encoding]::UTF8.GetBytes(($Manifest | ConvertTo-Json -Depth 4))
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $PartialPath = "$ArchivePath.partial"
+    if (Test-Path -LiteralPath $PartialPath) {
+        Remove-Item -LiteralPath $PartialPath -Force
+    }
+    if (Test-Path -LiteralPath $ArchivePath) {
+        Remove-Item -LiteralPath $ArchivePath -Force
+    }
+    $ArchiveStream = $null
+    $Archive = $null
+    try {
+        $ArchiveStream = [IO.File]::Open(
+            $PartialPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        $Archive = [IO.Compression.ZipArchive]::new(
+            $ArchiveStream, [IO.Compression.ZipArchiveMode]::Create, $true)
+        $ManifestEntry = $Archive.CreateEntry('manifest.json', [IO.Compression.CompressionLevel]::Optimal)
+        $ManifestStream = $ManifestEntry.Open()
+        try {
+            $ManifestStream.Write($ManifestBytes, 0, $ManifestBytes.Length)
+        }
+        finally {
+            $ManifestStream.Dispose()
+        }
+        foreach ($Item in $Entries) {
+            $Entry = $Archive.CreateEntry("payload/$($Item.Name)", [IO.Compression.CompressionLevel]::Optimal)
+            $Entry.LastWriteTime = $Item.File.LastWriteTimeUtc
+            $EntryStream = $Entry.Open()
+            $InputStream = [IO.File]::OpenRead($Item.File.FullName)
+            try {
+                $InputStream.CopyTo($EntryStream)
+            }
+            finally {
+                $InputStream.Dispose()
+                $EntryStream.Dispose()
+            }
+        }
+    }
+    finally {
+        if ($Archive) {
+            $Archive.Dispose()
+        }
+        if ($ArchiveStream) {
+            $ArchiveStream.Dispose()
+        }
+    }
+
+    try {
+        $VerifyStream = [IO.File]::OpenRead($PartialPath)
+        $VerifyArchive = [IO.Compression.ZipArchive]::new(
+            $VerifyStream, [IO.Compression.ZipArchiveMode]::Read, $false)
+        try {
+            if ($VerifyArchive.Entries.Count -ne ($Entries.Count + 1)) {
+                throw 'Save archive file count mismatch after creation.'
+            }
+            if (-not $VerifyArchive.GetEntry('manifest.json')) {
+                throw 'Save archive manifest is missing after creation.'
+            }
+        }
+        finally {
+            $VerifyArchive.Dispose()
+            $VerifyStream.Dispose()
+        }
+        Move-Item -LiteralPath $PartialPath -Destination $ArchivePath -Force
+    }
+    catch {
+        if (Test-Path -LiteralPath $PartialPath) {
+            Remove-Item -LiteralPath $PartialPath -Force
+        }
+        throw
+    }
+
+    $ArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ArchivePath).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText(
+        "$ArchivePath.sha256",
+        "$ArchiveHash  $([IO.Path]::GetFileName($ArchivePath))`n",
+        (New-Object Text.UTF8Encoding($false)))
+
+    $SaveCount = @($Entries | Where-Object { $_.Name -like 'savegames/*.baronysave' }).Count
+    Write-Host ''
+    Write-Host "Save archive: $ArchivePath"
+    Write-Host "SHA-256: $ArchiveHash"
+    Write-Host "Save games: $SaveCount"
+    Write-Host "Files: $($Entries.Count)"
+    if ($SkipConfig) {
+        Write-Host 'Settings: not included (-NoConfig).'
+    }
+    Write-Host ''
+    Write-Host 'Copy the ZIP to the Android device, open Data & Saves on the main menu,'
+    Write-Host 'and choose Import saves and settings (on a TV: Receive from PC).'
+    Write-Host 'Saves with the same names on the device are replaced.'
+}
+
 if (-not $SourcePath) {
     $Detected = @(
         Get-BaronyInstallCandidates |
@@ -516,6 +674,32 @@ elseif ($SourcePath -match '(?i)gog') {
 }
 else {
     'custom'
+}
+
+if ($Mods -and $Saves) {
+    throw 'Use -Mods and -Saves in separate runs; each creates its own ZIP.'
+}
+if ($NoConfig -and -not $Saves) {
+    throw '-NoConfig works only together with -Saves.'
+}
+
+if ($Saves) {
+    if (-not $OutputPath) {
+        $OutputPath = Join-Path (Get-Location) 'Barony-Android-Saves-from-PC.zip'
+    }
+    $OutputPath = [IO.Path]::GetFullPath($OutputPath)
+    if ((Test-Path -LiteralPath $OutputPath) -and -not $Force) {
+        throw "Output already exists. Use -Force to replace it: $OutputPath"
+    }
+    $SaveOutputDirectory = Split-Path -Parent $OutputPath
+    if (-not (Test-Path -LiteralPath $SaveOutputDirectory -PathType Container)) {
+        New-Item -ItemType Directory -Path $SaveOutputDirectory -Force | Out-Null
+    }
+    New-BaronySaveArchive `
+        -InstallPath $SourcePath `
+        -ArchivePath $OutputPath `
+        -SkipConfig:$NoConfig
+    return
 }
 
 if ($Mods) {

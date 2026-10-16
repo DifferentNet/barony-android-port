@@ -56,7 +56,8 @@ including touch controls and physical-controller support.
 - In-app import of validated owned-data ZIP archives.
 - Owned DLC entitlement transfer from Steam cached app tickets or GOG/DRM-free
   license keys.
-- Portable save/settings export and import from the main menu.
+- Portable save/settings export and import from the main menu, and PC save
+  transfer with the archive builder's `-Saves` option.
 - Optional Halloween and winter-holiday themes.
 - Up to four-player local split-screen co-op with gamepads.
 - Android TV and Google TV support with remote navigation
